@@ -1,0 +1,22 @@
+{
+    "name": "adibilis-satellite-template",
+    "version": "0.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start"
+    },
+    "dependencies": {
+        "@adbls/sdk": "^0.3.0",
+        "next": "^16",
+        "react": "^19",
+        "react-dom": "^19",
+        "zod": "^4.1.12"
+    },
+    "devDependencies": {
+        "@types/node": "^24",
+        "@types/react": "^19",
+        "typescript": "^5"
+    }
+}

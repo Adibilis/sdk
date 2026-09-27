@@ -1,0 +1,4 @@
+# pnpm holds back freshly published versions (minimumReleaseAge) as a supply-chain guard. Our own
+# scope is exempt: a new core release must be installable the moment its api-types are published.
+minimumReleaseAgeExclude:
+  - '@adbls/*'
