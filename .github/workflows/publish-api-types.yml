@@ -43,7 +43,12 @@ jobs:
         run: |
           set -euo pipefail
           : "${FORGEJO_TOKEN:?secret FORGEJO_PACKAGES_TOKEN is not set}"
-          curl -fsS -H "Authorization: token ${FORGEJO_TOKEN}" "${FORGEJO_NPM}/${PKG/\//%2F}" > forgejo.json
+          CODE=$(curl -sS -o forgejo.json -w '%{http_code}' -H "Authorization: token ${FORGEJO_TOKEN}" "${FORGEJO_NPM}/${PKG/\//%2F}")
+          if [ "$CODE" = 404 ]; then
+            # CORE hasn't published this package to Forgejo yet; a bad token is 401, not 404.
+            echo "$PKG is not on Forgejo yet; nothing to copy"; : > todo.txt; exit 0
+          fi
+          [ "$CODE" = 200 ] || { echo "Forgejo answered HTTP $CODE"; cat forgejo.json; exit 1; }
           LATEST=$(npm view "$PKG" dist-tags.latest 2>/dev/null || echo 0.0.0)
           node -e '
             const [cur] = process.argv.slice(1);
