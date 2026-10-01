@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
 export type CheckoutStep = 'customer_info' | 'payment';
 
@@ -55,6 +55,13 @@ export function CheckoutProvider({ children, onSuccess }: { children: ReactNode;
     const [proceedToPayment, setProceedToPaymentState] = useState<(() => void) | null>(null);
     const [paymentCallback, setPaymentCallbackState] = useState<(() => void) | null>(null);
 
+    // Wrapped in an updater: useState treats a bare function argument as a lazy initializer, so
+    // storing a callback directly would call it instead of holding it. Built once: satellites
+    // register their handler from an effect that depends on this setter, so a setter that changed
+    // identity on every update re-ran that effect forever and pinned the browser's main thread.
+    const setProceedToPayment = useCallback((fn: (() => void) | null) => setProceedToPaymentState(() => fn), []);
+    const setPaymentCallback = useCallback((fn: (() => void) | null) => setPaymentCallbackState(() => fn), []);
+
     const value = useMemo<CheckoutContextValue>(
         () => ({
             formState,
@@ -64,14 +71,12 @@ export function CheckoutProvider({ children, onSuccess }: { children: ReactNode;
             taxBreakdown,
             setTaxBreakdown,
             proceedToPayment,
-            // Wrapped in an updater: useState treats a bare function argument as a lazy initializer,
-            // so storing a callback directly would call it instead of holding it.
-            setProceedToPayment: (fn) => setProceedToPaymentState(() => fn),
+            setProceedToPayment,
             paymentCallback,
-            setPaymentCallback: (fn) => setPaymentCallbackState(() => fn),
+            setPaymentCallback,
             onSuccess,
         }),
-        [formState, stripe, taxBreakdown, proceedToPayment, paymentCallback, onSuccess]
+        [formState, stripe, taxBreakdown, proceedToPayment, setProceedToPayment, paymentCallback, setPaymentCallback, onSuccess]
     );
 
     return (

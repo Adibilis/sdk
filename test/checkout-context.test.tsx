@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { act, render, renderHook, screen } from '@testing-library/react';
+import { useEffect } from 'react';
 import { CheckoutProvider, useCheckout } from '../src/checkout/checkout-context';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -51,6 +52,33 @@ describe('CheckoutProvider', () => {
         expect(document.querySelector('[data-checkout-overlay]')).toBeNull();
         act(() => screen.getByText('go').click());
         expect(document.querySelector('[data-checkout-overlay]')).not.toBeNull();
+    });
+
+    it('keeps setProceedToPayment and setPaymentCallback stable across updates', () => {
+        const { result } = renderHook(() => useCheckout(), { wrapper });
+        const before = { proceed: result.current.setProceedToPayment, payment: result.current.setPaymentCallback };
+        act(() => result.current.setProceedToPayment(() => {}));
+        act(() => result.current.setPaymentCallback(() => {}));
+        act(() => result.current.setFormState({ isProcessing: false, isReady: true, step: 'payment' }));
+        expect(result.current.setProceedToPayment).toBe(before.proceed);
+        expect(result.current.setPaymentCallback).toBe(before.payment);
+    });
+
+    // The way every satellite registers its submit handler. With a setter whose identity changed on
+    // each update, this effect re-ran forever and pinned the browser's main thread (kaemo, flora
+    // and codonis-shop on 0.4.0; Firefox: "Diese Seite verlangsamt Firefox").
+    it('settles when a consumer registers its handler from an effect', () => {
+        let renders = 0;
+        function Consumer() {
+            renders++;
+            const { setProceedToPayment } = useCheckout();
+            useEffect(() => {
+                setProceedToPayment(() => {});
+            }, [setProceedToPayment]);
+            return null;
+        }
+        render(<CheckoutProvider onSuccess={() => {}}><Consumer /></CheckoutProvider>);
+        expect(renders).toBeLessThan(5);
     });
 
     it('exposes no deferred-intent api', () => {
