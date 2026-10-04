@@ -205,7 +205,7 @@ await submitPropertyEnquiry(core, property.id, {
     firstname, lastname, phone, message,   // all optional
     email,                                 // required
     language: 'de',                        // optional: de, fr, it or en
-    consent: true,                         // required, a real boolean — the visitor's answer
+    consent: true,                         // must be `true` — collect consent before submitting
     newsletter: false,                     // optional
     website,                               // the honeypot input's raw value — see below
     clientIp,                              // required: the visitor's IP, from your request
@@ -216,6 +216,7 @@ await submitPropertyEnquiry(core, property.id, {
 | Answer | Meaning |
 |---|---|
 | `202` | **accepted**, not necessarily stored — the call resolves with nothing |
+| `400` | validation — `ENQUIRY_CONSENT_REQUIRED` for consent, the Bean Validation codes for the other fields; the violations are in `err.body.errorList`. Not retryable |
 | `404` | the property is not published (or never existed) |
 | `403` | the `properties` module is off |
 | `503` | **not stored** — the site may retry |
@@ -238,7 +239,7 @@ shared by every visitor of the site. Once that bucket is full, core drops every 
 missing or blank `clientIp` with a `ZodError` before any request.
 
 As with the lead, the payload is checked against the generated zod schema first, so a missing
-`email`, a non-boolean `consent` or a missing `source` is a `ZodError` before any request. The
+`email`, a `consent` other than `true` or a missing `source` is a `ZodError` before any request. The
 schema's patterns are unanchored, though: a `source` like `Example-Detail` passes here and core still
 answers 400.
 
@@ -343,7 +344,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `POST /api/property/lead` | creates a seller contact, a `LEAD` property and the lead |
 | `GET /api/property/lead/{token}` | the lead behind a public token; the first read stamps `viewedAt` |
 | `POST /api/property/lead/{token}/valuation-request` | stamps the request and mails the team; idempotent |
-| `POST /api/property/{id}/enquiry` | accepts a visitor's enquiry about a published property (`submitPropertyEnquiry`); 202 = accepted (honeypot hits and rate-limit drops too), 503 = not stored |
+| `POST /api/property/{id}/enquiry` | accepts a visitor's enquiry about a published property (`submitPropertyEnquiry`); 202 = accepted (honeypot hits and rate-limit drops too), 400 = validation (`body.errorList`), 503 = not stored |
 
 The six property endpoints answer **403** while the `properties` module row is disabled — unlike
 `/api/shop/holidays`, which 404s while `shop` is disabled. Not a typo in either place: holidays

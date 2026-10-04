@@ -333,13 +333,21 @@ describe('submitPropertyEnquiry', () => {
         expect(client.post).not.toHaveBeenCalled();
     });
 
-    // Consent is a recorded yes or no, not something a form checkbox's "on" may stand in for.
+    // Consent is a real `true`, not something a form checkbox's "on" may stand in for.
     it('rejects a consent that is not a boolean before any request is made', async () => {
         const client = mockClient();
 
         await expect(
             submitPropertyEnquiry(client, 42, { ...enquiry, consent: 'yes' } as unknown as EnquiryInput)
         ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    // Core refuses anything but true (ENQUIRY_CONSENT_REQUIRED), so false is a guaranteed 400.
+    it('rejects consent: false before any request is made', async () => {
+        const client = mockClient();
+
+        await expect(submitPropertyEnquiry(client, 42, { ...enquiry, consent: false })).rejects.toBeInstanceOf(ZodError);
         expect(client.post).not.toHaveBeenCalled();
     });
 
