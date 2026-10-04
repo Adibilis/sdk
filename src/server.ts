@@ -14,9 +14,11 @@ export {
     fetchPublishedProperties,
     fetchPublishedProperty,
     requestPropertyValuation,
+    submitPropertyEnquiry,
     submitPropertyLead,
 } from './property/property-client.js';
 export type {
+    PropertyEnquiryRequest,
     PropertyLeadCreatedResponse,
     PropertyLeadRequest,
     PropertyLeadResponse,

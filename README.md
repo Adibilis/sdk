@@ -102,9 +102,9 @@ const src = shopImageUrl(process.env.ADIBILIS_BASE_URL!, one.mainImagePath!);
 
 ## Properties
 
-Five server-side calls cover a real-estate satellite end to end: a public listing, a public detail
-page, the valuation calculator's submit, the result page it redirects to, and the "I want a real
-valuation" button on that page.
+Six server-side calls cover a real-estate satellite end to end: a public listing, a public detail
+page, the enquiry form on that page, the valuation calculator's submit, the result page it redirects
+to, and the "I want a real valuation" button on that page.
 
 ```typescript
 import {
@@ -114,6 +114,7 @@ import {
     submitPropertyLead,
     fetchPropertyLead,
     requestPropertyValuation,
+    submitPropertyEnquiry,
 } from '@adbls/sdk/server';
 
 const core = createAdibilisClient({ baseUrl: process.env.ADIBILIS_BASE_URL!, apiKey: process.env.ADIBILIS_API_KEY! });
@@ -197,9 +198,41 @@ knows the seller opened the result. `requestPropertyValuation` stamps `valuation
 **idempotent** — a second call on an already-requested lead succeeds and sends no second mail, so a
 double-clicked button needs no guard.
 
+### 6. A visitor asks about a property
+
+```typescript
+await submitPropertyEnquiry(core, property.id, {
+    firstname, lastname, phone, message,   // all optional
+    email,                                 // required
+    language: 'de',                        // optional: de, fr, it or en
+    consent: true,                         // required, a real boolean — the visitor's answer
+    newsletter: false,                     // optional
+    clientIp,                              // the visitor's IP, from your request — always send it
+    source: 'example-detail',                // required: lower-case letters, digits and hyphens
+});
+```
+
+| Answer | Meaning |
+|---|---|
+| `202` | stored — the call resolves with nothing |
+| `404` | the property is not published (or never existed) |
+| `403` | the `properties` module is off |
+| `503` | **not stored** — the site may retry |
+
+Every non-2xx is an `AdibilisApiError`; read its `status`. Only the 503 is worth a retry.
+
+**Always forward the visitor's IP as `clientIp`.** Core rate-limits enquiries per IP, and every
+request arrives from the satellite's server, so an enquiry without it falls into one bucket shared by
+every visitor of the site — one busy afternoon and the form stops working for everybody.
+
+As with the lead, the payload is checked against the generated zod schema first, so a missing
+`email`, a non-boolean `consent` or a missing `source` is a `ZodError` before any request. The
+schema's patterns are unanchored, though: a `source` like `Example-Detail` passes here and core still
+answers 400.
+
 ### The module row, not the key
 
-All five are gated on `hasRole('WEBSITE')` **and** on the `properties` module row. A tenant that has
+All six are gated on `hasRole('WEBSITE')` **and** on the `properties` module row. A tenant that has
 not enabled the module answers **403, not 404** — on every one of them, including the public-looking
 listing. A satellite pointed at a misconfigured install therefore fails loudly instead of rendering
 an empty page. `properties` ships **disabled** on a fresh install; an operator enables the
@@ -298,8 +331,9 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `POST /api/property/lead` | creates a seller contact, a `LEAD` property and the lead |
 | `GET /api/property/lead/{token}` | the lead behind a public token; the first read stamps `viewedAt` |
 | `POST /api/property/lead/{token}/valuation-request` | stamps the request and mails the team; idempotent |
+| `POST /api/property/{id}/enquiry` | stores a visitor's enquiry about a published property (`submitPropertyEnquiry`); 202, 503 = not stored |
 
-The five property endpoints answer **403** while the `properties` module row is disabled — unlike
+The six property endpoints answer **403** while the `properties` module row is disabled — unlike
 `/api/shop/holidays`, which 404s while `shop` is disabled. Not a typo in either place: holidays
 predates the module-row convention.
 
