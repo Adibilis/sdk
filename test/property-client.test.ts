@@ -283,6 +283,8 @@ describe('requestPropertyValuation', () => {
 });
 
 describe('submitPropertyEnquiry', () => {
+    type EnquiryInput = Parameters<typeof submitPropertyEnquiry>[2];
+
     const enquiry = {
         firstname: 'Jana',
         lastname: 'Meier',
@@ -319,7 +321,7 @@ describe('submitPropertyEnquiry', () => {
         const { email: _dropped, ...withoutEmail } = enquiry;
 
         await expect(
-            submitPropertyEnquiry(client, 42, withoutEmail as unknown as PropertyEnquiryRequest)
+            submitPropertyEnquiry(client, 42, withoutEmail as unknown as EnquiryInput)
         ).rejects.toBeInstanceOf(ZodError);
         expect(client.post).not.toHaveBeenCalled();
     });
@@ -336,7 +338,7 @@ describe('submitPropertyEnquiry', () => {
         const client = mockClient();
 
         await expect(
-            submitPropertyEnquiry(client, 42, { ...enquiry, consent: 'yes' } as unknown as PropertyEnquiryRequest)
+            submitPropertyEnquiry(client, 42, { ...enquiry, consent: 'yes' } as unknown as EnquiryInput)
         ).rejects.toBeInstanceOf(ZodError);
         expect(client.post).not.toHaveBeenCalled();
     });
@@ -350,12 +352,29 @@ describe('submitPropertyEnquiry', () => {
         expect(client.post).not.toHaveBeenCalled();
     });
 
+    // Without an IP core falls back to one per-site bucket and, once it is full, drops every
+    // enquiry with a 202 -- the site would see success while nothing is stored.
+    it('rejects an enquiry with no clientIp before any request is made', async () => {
+        const client = mockClient();
+        const { clientIp: _dropped, ...withoutIp } = enquiry;
+
+        await expect(submitPropertyEnquiry(client, 42, withoutIp as unknown as EnquiryInput)).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it.each(['', '   '])('rejects a blank clientIp (%j) before any request is made', async (clientIp) => {
+        const client = mockClient();
+
+        await expect(submitPropertyEnquiry(client, 42, { ...enquiry, clientIp })).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
     it('is a rejection, not a synchronous throw, so a caller handling only the promise still sees it', async () => {
         const client = mockClient();
         let pending: Promise<void> | undefined;
 
         expect(() => {
-            pending = submitPropertyEnquiry(client, 42, {} as unknown as PropertyEnquiryRequest);
+            pending = submitPropertyEnquiry(client, 42, {} as unknown as EnquiryInput);
         }).not.toThrow();
 
         await expect(pending).rejects.toBeInstanceOf(ZodError);

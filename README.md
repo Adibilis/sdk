@@ -207,7 +207,7 @@ await submitPropertyEnquiry(core, property.id, {
     language: 'de',                        // optional: de, fr, it or en
     consent: true,                         // required, a real boolean — the visitor's answer
     newsletter: false,                     // optional
-    clientIp,                              // the visitor's IP, from your request — always send it
+    clientIp,                              // required: the visitor's IP, from your request
     source: 'example-detail',                // required: lower-case letters, digits and hyphens
 });
 ```
@@ -221,9 +221,11 @@ await submitPropertyEnquiry(core, property.id, {
 
 Every non-2xx is an `AdibilisApiError`; read its `status`. Only the 503 is worth a retry.
 
-**Always forward the visitor's IP as `clientIp`.** Core rate-limits enquiries per IP, and every
-request arrives from the satellite's server, so an enquiry without it falls into one bucket shared by
-every visitor of the site — one busy afternoon and the form stops working for everybody.
+**`clientIp` is required — forward the visitor's IP.** Core rate-limits enquiries per IP, and every
+request arrives from the satellite's server, so an enquiry without one falls back to a single bucket
+shared by every visitor of the site. Once that bucket is full, core drops every further enquiry
+**silently with a 202**: the form keeps "working" and nothing is stored. The SDK therefore rejects a
+missing or blank `clientIp` with a `ZodError` before any request.
 
 As with the lead, the payload is checked against the generated zod schema first, so a missing
 `email`, a non-boolean `consent` or a missing `source` is a `ZodError` before any request. The

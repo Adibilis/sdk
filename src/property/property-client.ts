@@ -7,6 +7,7 @@ import type {
     PropertyLeadResponse,
     PublishedPropertyResponse,
 } from '@adbls/api-types';
+import { z } from 'zod';
 import type { AdibilisClient } from '../client/api-client.js';
 
 export type {
@@ -98,6 +99,11 @@ export async function requestPropertyValuation(client: AdibilisClient, token: st
     await client.post<void>(`/api/property/lead/${encodeURIComponent(token)}/valuation-request`, undefined);
 }
 
+// Stricter than the generated schema, which lets core's silent per-site fallback through.
+const EnquiryPayloadModel = PropertyEnquiryRequestModel.extend({
+    clientIp: z.string().max(45).regex(/\S/, 'clientIp must be the visitor\'s IP, not blank'),
+});
+
 /**
  * A visitor asks about a published property. Core stores the enquiry and answers **202** — stored,
  * nothing more: what happens next (a mail, a follow-up) is core's business, not the site's.
@@ -105,8 +111,11 @@ export async function requestPropertyValuation(client: AdibilisClient, token: st
  * A property that is not published is a **404**, the module being off a **403**, and a **503**
  * means core did not store the enquiry — the site may retry that one.
  *
- * Forward the visitor's IP as `clientIp`. Core rate-limits per IP; a request without it falls into
- * one bucket shared by every visitor of the site.
+ * `clientIp` is required and must not be blank: forward the visitor's IP from your request. Core
+ * rate-limits per IP, and without one it falls back to a single per-site bucket shared by every
+ * visitor. Once that bucket is full core drops every further enquiry **silently with a 202**, so
+ * the form looks like it works while nothing is stored. A missing or blank `clientIp` is therefore
+ * a `ZodError` here, before any request.
  *
  * The payload is checked against the generated schema before it leaves the process, so a missing
  * `email`, a non-boolean `consent` or a missing `source` surfaces as a `ZodError` here rather than a
@@ -114,8 +123,12 @@ export async function requestPropertyValuation(client: AdibilisClient, token: st
  * `source` or `language` that merely *contains* an allowed sequence passes here and core still
  * rejects it.
  */
-export async function submitPropertyEnquiry(client: AdibilisClient, propertyId: number, request: PropertyEnquiryRequest): Promise<void> {
+export async function submitPropertyEnquiry(
+    client: AdibilisClient,
+    propertyId: number,
+    request: PropertyEnquiryRequest & { clientIp: string }
+): Promise<void> {
     // async so a validation failure is a rejection like every other failure, not a synchronous throw
-    const payload = PropertyEnquiryRequestModel.parse(request);
+    const payload = EnquiryPayloadModel.parse(request);
     await client.post<void>(`/api/property/${encodeURIComponent(String(propertyId))}/enquiry`, payload);
 }
