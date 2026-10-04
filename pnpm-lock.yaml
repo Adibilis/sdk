@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@adbls/api-types':
-        specifier: ^1.4.7
-        version: 1.4.7(zod@4.4.3)
+        specifier: 0.0.0-dev.899
+        version: 0.0.0-dev.899(zod@4.4.3)
       react:
         specifier: '>=19'
         version: 19.2.8
@@ -39,8 +39,8 @@ importers:
 
 packages:
 
-  '@adbls/api-types@1.4.7':
-    resolution: {integrity: sha512-nn7XA8AKCZrKLbdUxzIkW0ue2J1giwUIGE+RJWWoZbcE9uUoY3zfBQ/1Zl703Oq4YPq/F+ty0MNpUSYPQGz8fQ==}
+  '@adbls/api-types@0.0.0-dev.899':
+    resolution: {integrity: sha512-0KzbjcfmA/fu+HJ0TTqDzHgyoGSLfnSryGI3sa6ixhl/wKcv/5+v+I5dlG4QLc/wymMazAxmkmY95FaAwfszOQ==, tarball: https://forge.cloud.adibilis.ch/api/packages/core/npm/%40adbls%2Fapi-types/-/0.0.0-dev.899/api-types-0.0.0-dev.899.tgz}
     peerDependencies:
       zod: ^4.1.12
 
@@ -707,7 +707,7 @@ packages:
 
 snapshots:
 
-  '@adbls/api-types@1.4.7(zod@4.4.3)':
+  '@adbls/api-types@0.0.0-dev.899(zod@4.4.3)':
     dependencies:
       zod: 4.4.3
 
