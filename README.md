@@ -308,9 +308,12 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.4.7`.
-Core `v1.4.6` was the first release carrying the shop catalog, per-currency Stripe accounts and
-catalog-priced checkout lines; `1.4.7` is the first version published under this name. A range,
+The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.5.1`.
+`submitPropertyEnquiry` **needs core ≥ v1.5.1**: an older core lacks
+`POST /api/property/{id}/enquiry`, and the resulting 404/405 reads like "property not published".
+Core `v1.4.6` was the first release carrying
+the shop catalog, per-currency Stripe accounts and catalog-priced checkout lines; `1.4.7` is the
+first version published under this name. A range,
 not a pin, so a new core release reaches SDK users without an SDK release; the SDK only needs a
 release when it wants something new from core.
 
