@@ -221,7 +221,12 @@ await submitPropertyEnquiry(core, property.id, {
 | `403` | the `properties` module is off |
 | `503` | **not stored** — the site may retry |
 
-Every non-2xx is an `AdibilisApiError`; read its `status`. Only the 503 is worth a retry.
+Every non-2xx is an `AdibilisApiError`; read its `status`. Of those, only the 503 is worth a retry.
+
+A **network failure** (DNS, connection reset, timeout) is not an `AdibilisApiError`: the platform
+fetch's plain `TypeError` propagates as is, and the enquiry may or may not have reached core. A retry
+is safe — core dedupes the same e-mail + property within 24 h, so a duplicate is absorbed rather than
+stored twice.
 
 **A 202 means accepted, not stored.** Core answers the same empty 202 when it drops an enquiry as a
 honeypot hit, or under its per-IP or per-property+email rate limit. The site cannot tell these apart,
