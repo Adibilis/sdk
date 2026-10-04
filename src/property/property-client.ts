@@ -1,14 +1,22 @@
-import { PropertyLeadRequestModel } from '@adbls/api-types';
+import { PropertyEnquiryRequestModel, PropertyLeadRequestModel } from '@adbls/api-types';
 import type {
     PageResponse,
+    PropertyEnquiryRequest,
     PropertyLeadCreatedResponse,
     PropertyLeadRequest,
     PropertyLeadResponse,
     PublishedPropertyResponse,
 } from '@adbls/api-types';
+import { z } from 'zod';
 import type { AdibilisClient } from '../client/api-client.js';
 
-export type { PropertyLeadCreatedResponse, PropertyLeadRequest, PropertyLeadResponse, PublishedPropertyResponse };
+export type {
+    PropertyEnquiryRequest,
+    PropertyLeadCreatedResponse,
+    PropertyLeadRequest,
+    PropertyLeadResponse,
+    PublishedPropertyResponse,
+};
 
 export interface PublishedPropertyPageOptions {
     /** Zero-based page index. Omitted means core's default, 0. */
@@ -89,4 +97,48 @@ export function fetchPropertyLead(client: AdibilisClient, token: string): Promis
  */
 export async function requestPropertyValuation(client: AdibilisClient, token: string): Promise<void> {
     await client.post<void>(`/api/property/lead/${encodeURIComponent(token)}/valuation-request`, undefined);
+}
+
+// Stricter than the generated schema, which lets core's silent per-site fallback and a certain
+// consent 400 through.
+const EnquiryPayloadModel = PropertyEnquiryRequestModel.extend({
+    clientIp: z.string().max(45).regex(/\S/, 'clientIp must be the visitor\'s IP, not blank'),
+    consent: z.literal(true, 'consent must be true: collect it before submitting'),
+});
+
+/**
+ * A visitor asks about a published property. Core answers **202 — accepted**, not "stored": it gives
+ * the same empty 202 when it drops the enquiry as a honeypot hit or under its per-IP or
+ * per-property+email rate limit, and the site cannot tell these apart, by design. What happens to an
+ * accepted enquiry (a mail, a follow-up) is core's business, not the site's.
+ *
+ * `website` is the honeypot: render it as a hidden form input that a person leaves empty, and
+ * forward its raw value verbatim. Never put the site's own URL there — any non-blank value makes
+ * core treat the enquiry as a bot and drop it with a 202.
+ *
+ * A property that is not published is a **404**, the module being off a **403**, and a **503**
+ * means core did not store the enquiry — the site may retry that one. A **400** is a validation
+ * failure and not retryable: `ENQUIRY_CONSENT_REQUIRED` for consent, the Bean Validation codes for
+ * the other fields, with the violations in `err.body.errorList`.
+ *
+ * `clientIp` is required and must not be blank: forward the visitor's IP from your request. Core
+ * rate-limits per IP, and without one it falls back to a single per-site bucket shared by every
+ * visitor. Once that bucket is full core drops every further enquiry **silently with a 202**, so
+ * the form looks like it works while nothing is stored. A missing or blank `clientIp` is therefore
+ * a `ZodError` here, before any request.
+ *
+ * The payload is checked against the generated schema before it leaves the process, so a missing
+ * `email`, a `consent` other than `true` or a missing `source` surfaces as a `ZodError` here rather
+ * than a 400 round-trip. The schema is a subset of core's rules — its patterns are unanchored, so a
+ * `source` or `language` that merely *contains* an allowed sequence passes here and core still
+ * rejects it.
+ */
+export async function submitPropertyEnquiry(
+    client: AdibilisClient,
+    propertyId: number,
+    request: PropertyEnquiryRequest & { clientIp: string }
+): Promise<void> {
+    // async so a validation failure is a rejection like every other failure, not a synchronous throw
+    const payload = EnquiryPayloadModel.parse(request);
+    await client.post<void>(`/api/property/${encodeURIComponent(String(propertyId))}/enquiry`, payload);
 }

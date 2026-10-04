@@ -1,12 +1,19 @@
-import type { PropertyLeadCreatedResponse, PropertyLeadRequest, PublishedPropertyResponse } from '@adbls/api-types';
+import type {
+    PropertyEnquiryRequest,
+    PropertyLeadCreatedResponse,
+    PropertyLeadRequest,
+    PublishedPropertyResponse,
+} from '@adbls/api-types';
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import { createAdibilisClient } from '../src/client/api-client';
+import { AdibilisApiError } from '../src/client/errors';
 import {
     fetchPropertyLead,
     fetchPublishedProperties,
     fetchPublishedProperty,
     requestPropertyValuation,
+    submitPropertyEnquiry,
     submitPropertyLead,
 } from '../src/property/property-client';
 
@@ -273,6 +280,182 @@ describe('requestPropertyValuation', () => {
         await requestPropertyValuation(client, 'ab12cd34');
 
         expect(client.post).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('submitPropertyEnquiry', () => {
+    type EnquiryInput = Parameters<typeof submitPropertyEnquiry>[2];
+
+    const enquiry = {
+        firstname: 'Jana',
+        lastname: 'Meier',
+        email: 'jana@example.ch',
+        phone: '+41 79 000 00 00',
+        message: 'Is the villa still available for a viewing next week?',
+        language: 'de',
+        consent: true,
+        newsletter: false,
+        clientIp: '203.0.113.7',
+        source: 'example-detail',
+    } as const satisfies PropertyEnquiryRequest;
+
+    it('posts the validated enquiry to the property-scoped endpoint and resolves nothing', async () => {
+        const client = mockClient();
+
+        await expect(submitPropertyEnquiry(client, 42, enquiry)).resolves.toBeUndefined();
+        expect(client.post).toHaveBeenCalledWith('/api/property/42/enquiry', enquiry);
+    });
+
+    it('resolves an empty 202, which is core saying the enquiry is accepted', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+
+        await expect(submitPropertyEnquiry(client, 42, enquiry)).resolves.toBeUndefined();
+
+        const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe('https://core.test/api/property/42/enquiry');
+        expect(init.method).toBe('POST');
+        expect(JSON.parse(init.body as string)).toEqual(enquiry);
+    });
+
+    it('rejects an enquiry with no email before any request is made', async () => {
+        const client = mockClient();
+        const { email: _dropped, ...withoutEmail } = enquiry;
+
+        await expect(
+            submitPropertyEnquiry(client, 42, withoutEmail as unknown as EnquiryInput)
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it('rejects an enquiry whose email is not an address before any request is made', async () => {
+        const client = mockClient();
+
+        await expect(submitPropertyEnquiry(client, 42, { ...enquiry, email: 'jana' })).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    // Consent is a real `true`, not something a form checkbox's "on" may stand in for.
+    it('rejects a consent that is not a boolean before any request is made', async () => {
+        const client = mockClient();
+
+        await expect(
+            submitPropertyEnquiry(client, 42, { ...enquiry, consent: 'yes' } as unknown as EnquiryInput)
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    // Core refuses anything but true (ENQUIRY_CONSENT_REQUIRED), so false is a guaranteed 400.
+    it('rejects consent: false before any request is made', async () => {
+        const client = mockClient();
+
+        await expect(submitPropertyEnquiry(client, 42, { ...enquiry, consent: false })).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    // The generated pattern is unanchored (`/[a-z0-9-]+/`), so only a source with no lower-case
+    // letter, digit or hyphen at all fails here; a mixed-case one gets through to core's 400.
+    it('rejects an upper-case source before any request is made', async () => {
+        const client = mockClient();
+
+        await expect(submitPropertyEnquiry(client, 42, { ...enquiry, source: 'EXAMPLE' })).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    // Without an IP core falls back to one per-site bucket and, once it is full, drops every
+    // enquiry with a 202 -- the site would see success while nothing is stored.
+    it('rejects an enquiry with no clientIp before any request is made', async () => {
+        const client = mockClient();
+        const { clientIp: _dropped, ...withoutIp } = enquiry;
+
+        await expect(submitPropertyEnquiry(client, 42, withoutIp as unknown as EnquiryInput)).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it.each(['', '   '])('rejects a blank clientIp (%j) before any request is made', async (clientIp) => {
+        const client = mockClient();
+
+        await expect(submitPropertyEnquiry(client, 42, { ...enquiry, clientIp })).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it('is a rejection, not a synchronous throw, so a caller handling only the promise still sees it', async () => {
+        const client = mockClient();
+        let pending: Promise<void> | undefined;
+
+        expect(() => {
+            pending = submitPropertyEnquiry(client, 42, {} as unknown as EnquiryInput);
+        }).not.toThrow();
+
+        await expect(pending).rejects.toBeInstanceOf(ZodError);
+    });
+
+    it('surfaces the not-published 404 as an AdibilisApiError', async () => {
+        const { client } = clientRespondingWith(404, {
+            error: 'Not Found',
+            errorList: { PROPERTY_NOT_FOUND: ['Property not found'] },
+            url: '/api/property/7/enquiry',
+        });
+
+        await expect(submitPropertyEnquiry(client, 7, enquiry)).rejects.toMatchObject({ name: 'AdibilisApiError', status: 404 });
+    });
+
+    it('surfaces the disabled-module 403 as an AdibilisApiError', async () => {
+        const { client } = clientRespondingWith(403, {
+            error: 'Forbidden',
+            errorList: { PROPERTIES_MODULE_DISABLED: ['Properties module disabled'] },
+            url: '/api/property/42/enquiry',
+        });
+
+        await expect(submitPropertyEnquiry(client, 42, enquiry)).rejects.toMatchObject({ name: 'AdibilisApiError', status: 403 });
+    });
+
+    // The SDK's own check makes this body unreachable for consent, but core is the authority and a
+    // drifted schema would land here; what matters is that the code reaches the caller.
+    it('surfaces a 400 as an AdibilisApiError carrying the body and its error code', async () => {
+        const body = {
+            error: 'Bad Request',
+            errorList: { ENQUIRY_CONSENT_REQUIRED: ['Consent is required'] },
+            url: '/api/property/42/enquiry',
+        };
+        const { client } = clientRespondingWith(400, body);
+
+        const err = await submitPropertyEnquiry(client, 42, enquiry).catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(AdibilisApiError);
+        expect(err).toMatchObject({ status: 400, body, path: '/api/property/42/enquiry' });
+    });
+
+    // The honeypot only works if `website` survives the schema's $strip: an api-types regen that
+    // dropped the field would silently switch spam protection off on every satellite.
+    it('forwards the honeypot website field verbatim and resolves the 202 core gives a bot', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+        const website = '  http://spam.example/?a=1  ';
+
+        await expect(submitPropertyEnquiry(client, 42, { ...enquiry, website })).resolves.toBeUndefined();
+
+        const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(JSON.parse(init.body as string)).toEqual({ ...enquiry, website });
+    });
+
+    // The client does not wrap transport failures: the platform fetch's TypeError propagates as is,
+    // and the enquiry may or may not have reached core.
+    it('propagates a network failure as the plain TypeError fetch rejected with', async () => {
+        const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        const err = await submitPropertyEnquiry(client, 42, enquiry).catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(TypeError);
+        expect(err).not.toBeInstanceOf(AdibilisApiError);
+        expect((err as TypeError).message).toBe('fetch failed');
+        expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+    // 503 is the one failure a site may retry: core did not store the enquiry.
+    it('surfaces the not-stored 503 as an AdibilisApiError', async () => {
+        const { client } = clientRespondingWith(503, null);
+
+        await expect(submitPropertyEnquiry(client, 42, enquiry)).rejects.toMatchObject({ name: 'AdibilisApiError', status: 503 });
     });
 });
 
