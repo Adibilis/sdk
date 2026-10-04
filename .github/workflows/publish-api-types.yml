@@ -65,7 +65,9 @@ jobs:
       - name: Copy them
         run: |
           set -euo pipefail
-          while read -r VERSION TARBALL; do
+          # `|| [ -n "$VERSION" ]`: todo.txt has no trailing newline, so `read` returns 1 on its last
+          # (or only) line while still filling the variables — without this the loop skips it.
+          while read -r VERSION TARBALL || [ -n "$VERSION" ]; do
             [ -n "$VERSION" ] || continue
             rm -rf pkg && mkdir pkg
             curl -fsS -H "Authorization: token ${FORGEJO_TOKEN}" "$TARBALL" | tar -xz -C pkg --strip-components=1
