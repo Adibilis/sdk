@@ -76,6 +76,9 @@ jobs:
             test "$(node -p 'require("./package.json").version')" = "$VERSION"
             # CORE's CI points publishConfig at Forgejo; it outranks every other registry setting.
             npm pkg set publishConfig.registry=https://registry.npmjs.org/ publishConfig.access=public
+            # Provenance is attested by THIS repo's workflow, and npm refuses the publish (E422) unless
+            # package.json names the same repository. CORE leaves it empty, so set it here.
+            npm pkg set repository.type=git repository.url=git+https://github.com/Adibilis/sdk.git
             npm publish --tag latest
             cd ..
           done < todo.txt
