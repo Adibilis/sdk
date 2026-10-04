@@ -105,8 +105,14 @@ const EnquiryPayloadModel = PropertyEnquiryRequestModel.extend({
 });
 
 /**
- * A visitor asks about a published property. Core stores the enquiry and answers **202** — stored,
- * nothing more: what happens next (a mail, a follow-up) is core's business, not the site's.
+ * A visitor asks about a published property. Core answers **202 — accepted**, not "stored": it gives
+ * the same empty 202 when it drops the enquiry as a honeypot hit or under its per-IP or
+ * per-property+email rate limit, and the site cannot tell these apart, by design. What happens to an
+ * accepted enquiry (a mail, a follow-up) is core's business, not the site's.
+ *
+ * `website` is the honeypot: render it as a hidden form input that a person leaves empty, and
+ * forward its raw value verbatim. Never put the site's own URL there — any non-blank value makes
+ * core treat the enquiry as a bot and drop it with a 202.
  *
  * A property that is not published is a **404**, the module being off a **403**, and a **503**
  * means core did not store the enquiry — the site may retry that one.

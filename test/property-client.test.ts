@@ -305,7 +305,7 @@ describe('submitPropertyEnquiry', () => {
         expect(client.post).toHaveBeenCalledWith('/api/property/42/enquiry', enquiry);
     });
 
-    it('resolves an empty 202, which is core saying the enquiry is stored', async () => {
+    it('resolves an empty 202, which is core saying the enquiry is accepted', async () => {
         const { client, fetchMock } = clientRespondingWith(202, null);
 
         await expect(submitPropertyEnquiry(client, 42, enquiry)).resolves.toBeUndefined();
