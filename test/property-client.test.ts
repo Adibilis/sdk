@@ -7,6 +7,7 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import { createAdibilisClient } from '../src/client/api-client';
+import { AdibilisApiError } from '../src/client/errors';
 import {
     fetchPropertyLead,
     fetchPublishedProperties,
@@ -406,6 +407,48 @@ describe('submitPropertyEnquiry', () => {
         });
 
         await expect(submitPropertyEnquiry(client, 42, enquiry)).rejects.toMatchObject({ name: 'AdibilisApiError', status: 403 });
+    });
+
+    // The SDK's own check makes this body unreachable for consent, but core is the authority and a
+    // drifted schema would land here; what matters is that the code reaches the caller.
+    it('surfaces a 400 as an AdibilisApiError carrying the body and its error code', async () => {
+        const body = {
+            error: 'Bad Request',
+            errorList: { ENQUIRY_CONSENT_REQUIRED: ['Consent is required'] },
+            url: '/api/property/42/enquiry',
+        };
+        const { client } = clientRespondingWith(400, body);
+
+        const err = await submitPropertyEnquiry(client, 42, enquiry).catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(AdibilisApiError);
+        expect(err).toMatchObject({ status: 400, body, path: '/api/property/42/enquiry' });
+    });
+
+    // The honeypot only works if `website` survives the schema's $strip: an api-types regen that
+    // dropped the field would silently switch spam protection off on every satellite.
+    it('forwards the honeypot website field verbatim and resolves the 202 core gives a bot', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+        const website = '  http://spam.example/?a=1  ';
+
+        await expect(submitPropertyEnquiry(client, 42, { ...enquiry, website })).resolves.toBeUndefined();
+
+        const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(JSON.parse(init.body as string)).toEqual({ ...enquiry, website });
+    });
+
+    // The client does not wrap transport failures: the platform fetch's TypeError propagates as is,
+    // and the enquiry may or may not have reached core.
+    it('propagates a network failure as the plain TypeError fetch rejected with', async () => {
+        const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        const err = await submitPropertyEnquiry(client, 42, enquiry).catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(TypeError);
+        expect(err).not.toBeInstanceOf(AdibilisApiError);
+        expect((err as TypeError).message).toBe('fetch failed');
+        expect(fetchMock).toHaveBeenCalledOnce();
     });
 
     // 503 is the one failure a site may retry: core did not store the enquiry.
