@@ -209,7 +209,7 @@ await submitPropertyEnquiry(core, property.id, {
     newsletter: false,                     // optional
     website,                               // the honeypot input's raw value — see below
     clientIp,                              // required: the visitor's IP, from your request
-    source: 'example-detail',                // required: lower-case letters, digits and hyphens
+    source: 'example-detail',              // required: lower-case letters, digits and hyphens
 });
 ```
 
