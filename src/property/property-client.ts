@@ -114,7 +114,9 @@ const EnquiryPayloadModel = PropertyEnquiryRequestModel.extend({
  *
  * `website` is the honeypot: render it as a hidden form input that a person leaves empty, and
  * forward its raw value verbatim. Never put the site's own URL there — any non-blank value makes
- * core treat the enquiry as a bot and drop it with a 202.
+ * core treat the enquiry as a bot and drop it with a 202. A non-blank `website` skips every local
+ * check and is sent as-is, so a bot gets core's silent 202 rather than a client-side rejection that
+ * would reveal the trap.
  *
  * A property that is not published is a **404**, the module being off a **403**, and a **503**
  * means core did not store the enquiry — the site may retry that one. A **400** is a validation
@@ -139,6 +141,6 @@ export async function submitPropertyEnquiry(
     request: PropertyEnquiryRequest & { clientIp: string }
 ): Promise<void> {
     // async so a validation failure is a rejection like every other failure, not a synchronous throw
-    const payload = EnquiryPayloadModel.parse(request);
+    const payload = request.website?.trim() ? request : EnquiryPayloadModel.parse(request);
     await client.post<void>(`/api/property/${encodeURIComponent(String(propertyId))}/enquiry`, payload);
 }

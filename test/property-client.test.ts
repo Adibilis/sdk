@@ -437,6 +437,34 @@ describe('submitPropertyEnquiry', () => {
         expect(JSON.parse(init.body as string)).toEqual({ ...enquiry, website });
     });
 
+    it('sends a honeypot hit with consent false, as core answers a bot with a silent 202', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+        const bot = { ...enquiry, consent: false, website: 'http://spam.example' };
+
+        await expect(submitPropertyEnquiry(client, 42, bot)).resolves.toBeUndefined();
+
+        const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(JSON.parse(init.body as string)).toEqual(bot);
+    });
+
+    it('sends a honeypot hit with a blank clientIp', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+        const bot = { ...enquiry, clientIp: '  ', website: 'http://spam.example' };
+
+        await expect(submitPropertyEnquiry(client, 42, bot)).resolves.toBeUndefined();
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('still rejects consent false when the honeypot is empty', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+
+        await expect(
+            submitPropertyEnquiry(client, 42, { ...enquiry, consent: false, website: '' })
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     // The client does not wrap transport failures: the platform fetch's TypeError propagates as is,
     // and the enquiry may or may not have reached core.
     it('propagates a network failure as the plain TypeError fetch rejected with', async () => {
