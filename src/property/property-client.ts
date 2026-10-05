@@ -121,7 +121,7 @@ const EnquiryPayloadModel = PropertyEnquiryRequestModel.extend({
  * A property that is not published is a **404**, the module being off a **403**, and a **503**
  * means core did not store the enquiry — the site may retry that one. A **400** is a validation
  * failure and not retryable: `ENQUIRY_CONSENT_REQUIRED` for consent, the Bean Validation codes for
- * the other fields, with the violations in `err.body.errorList`.
+ * the other fields, with the violations in `err.body.violations` (an array of `{ field, code, … }`; `body` is typed `unknown`).
  *
  * `clientIp` is required and must not be blank: forward the visitor's IP from your request. Core
  * rate-limits per IP, and without one it falls back to a single per-site bucket shared by every
