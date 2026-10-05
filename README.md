@@ -225,8 +225,9 @@ Every non-2xx is an `AdibilisApiError`; read its `status`. Of those, only the 50
 
 A **network failure** (DNS, connection reset, timeout) is not an `AdibilisApiError`: the platform
 fetch's plain `TypeError` propagates as is, and the enquiry may or may not have reached core. A retry
-is safe — core dedupes the same e-mail + property within 24 h, so a duplicate is absorbed rather than
-stored twice.
+is safe — no second contact and no second interest are created. It is not absorbed, though: a retry
+within 24 h of the same e-mail + property adds a new ingest record and appends a duplicate note to
+the existing interest.
 
 **A 202 means accepted, not stored.** Core answers the same empty 202 when it drops an enquiry as a
 honeypot hit, or under its per-IP or per-property+email rate limit. The site cannot tell these apart,
