@@ -414,7 +414,7 @@ describe('submitPropertyEnquiry', () => {
     it('surfaces a 400 as an AdibilisApiError carrying the body and its error code', async () => {
         const body = {
             error: 'Bad Request',
-            errorList: { ENQUIRY_CONSENT_REQUIRED: ['Consent is required'] },
+            violations: [{ field: 'consent', code: 'ENQUIRY_CONSENT_REQUIRED' }],
             url: '/api/property/42/enquiry',
         };
         const { client } = clientRespondingWith(400, body);
