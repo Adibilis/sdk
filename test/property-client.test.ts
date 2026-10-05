@@ -414,7 +414,7 @@ describe('submitPropertyEnquiry', () => {
     it('surfaces a 400 as an AdibilisApiError carrying the body and its error code', async () => {
         const body = {
             error: 'Bad Request',
-            errorList: { ENQUIRY_CONSENT_REQUIRED: ['Consent is required'] },
+            violations: [{ field: 'consent', code: 'ENQUIRY_CONSENT_REQUIRED' }],
             url: '/api/property/42/enquiry',
         };
         const { client } = clientRespondingWith(400, body);
@@ -435,6 +435,34 @@ describe('submitPropertyEnquiry', () => {
 
         const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
         expect(JSON.parse(init.body as string)).toEqual({ ...enquiry, website });
+    });
+
+    it('sends a honeypot hit with consent false, as core answers a bot with a silent 202', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+        const bot = { ...enquiry, consent: false, website: 'http://spam.example' };
+
+        await expect(submitPropertyEnquiry(client, 42, bot)).resolves.toBeUndefined();
+
+        const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(JSON.parse(init.body as string)).toEqual(bot);
+    });
+
+    it('sends a honeypot hit with a blank clientIp', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+        const bot = { ...enquiry, clientIp: '  ', website: 'http://spam.example' };
+
+        await expect(submitPropertyEnquiry(client, 42, bot)).resolves.toBeUndefined();
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('still rejects consent false when the honeypot is empty', async () => {
+        const { client, fetchMock } = clientRespondingWith(202, null);
+
+        await expect(
+            submitPropertyEnquiry(client, 42, { ...enquiry, consent: false, website: '' })
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 
     // The client does not wrap transport failures: the platform fetch's TypeError propagates as is,

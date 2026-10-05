@@ -209,14 +209,14 @@ await submitPropertyEnquiry(core, property.id, {
     newsletter: false,                     // optional
     website,                               // the honeypot input's raw value — see below
     clientIp,                              // required: the visitor's IP, from your request
-    source: 'example-detail',                // required: lower-case letters, digits and hyphens
+    source: 'example-detail',              // required: lower-case letters, digits and hyphens
 });
 ```
 
 | Answer | Meaning |
 |---|---|
 | `202` | **accepted**, not necessarily stored — the call resolves with nothing |
-| `400` | validation — `ENQUIRY_CONSENT_REQUIRED` for consent, the Bean Validation codes for the other fields; the violations are in `err.body.errorList`. Not retryable |
+| `400` | validation — `ENQUIRY_CONSENT_REQUIRED` for consent, the Bean Validation codes for the other fields; the violations are in `err.body.violations`, an array of `{ field, code, … }`. Not retryable |
 | `404` | the property is not published (or never existed) |
 | `403` | the `properties` module is off |
 | `503` | **not stored** — the site may retry |
@@ -225,8 +225,9 @@ Every non-2xx is an `AdibilisApiError`; read its `status`. Of those, only the 50
 
 A **network failure** (DNS, connection reset, timeout) is not an `AdibilisApiError`: the platform
 fetch's plain `TypeError` propagates as is, and the enquiry may or may not have reached core. A retry
-is safe — core dedupes the same e-mail + property within 24 h, so a duplicate is absorbed rather than
-stored twice.
+is safe — no second contact and no second interest are created. It is not absorbed, though: a retry
+within 24 h of the same e-mail + property adds a new ingest record and appends a duplicate note to
+the existing interest.
 
 **A 202 means accepted, not stored.** Core answers the same empty 202 when it drops an enquiry as a
 honeypot hit, or under its per-IP or per-property+email rate limit. The site cannot tell these apart,
@@ -352,7 +353,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `POST /api/property/lead` | creates a seller contact, a `LEAD` property and the lead |
 | `GET /api/property/lead/{token}` | the lead behind a public token; the first read stamps `viewedAt` |
 | `POST /api/property/lead/{token}/valuation-request` | stamps the request and mails the team; idempotent |
-| `POST /api/property/{id}/enquiry` | accepts a visitor's enquiry about a published property (`submitPropertyEnquiry`); 202 = accepted (honeypot hits and rate-limit drops too), 400 = validation (`body.errorList`), 503 = not stored |
+| `POST /api/property/{id}/enquiry` | accepts a visitor's enquiry about a published property (`submitPropertyEnquiry`); 202 = accepted (honeypot hits and rate-limit drops too), 400 = validation (`body.violations`), 503 = not stored |
 
 The six property endpoints answer **403** while the `properties` module row is disabled — unlike
 `/api/shop/holidays`, which 404s while `shop` is disabled. Not a typo in either place: holidays
