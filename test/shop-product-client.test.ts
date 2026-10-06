@@ -33,7 +33,7 @@ describe('fetchShopProducts', () => {
         await expect(fetchShopProducts(client)).resolves.toEqual([product]);
 
         const [url, init] = fetchMock.mock.calls[0];
-        expect(url).toBe('https://core.test/api/shop/products');
+        expect(url).toBe('https://core.test/api/shop/product');
         expect((init.headers as Record<string, string>)['X-API-Secret-Key']).toBe('k');
     });
 
@@ -50,7 +50,7 @@ describe('fetchShopProduct', () => {
         const { client, fetchMock } = clientRespondingWith(200, product);
 
         await expect(fetchShopProduct(client, 12)).resolves.toEqual(product);
-        expect(fetchMock.mock.calls[0][0]).toBe('https://core.test/api/shop/products/12');
+        expect(fetchMock.mock.calls[0][0]).toBe('https://core.test/api/shop/product/12');
     });
 
     it('answers 404 for a product that is not listed', async () => {

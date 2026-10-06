@@ -12,7 +12,7 @@ export type { ProductPriceResponse, ShopProductImageResponse, ShopProductRespons
  * rendering an empty shop.
  */
 export function fetchShopProducts(client: AdibilisClient): Promise<ShopProductResponse[]> {
-    return client.get<ShopProductResponse[]>('/api/shop/products');
+    return client.get<ShopProductResponse[]>('/api/shop/product');
 }
 
 /**
@@ -20,5 +20,5 @@ export function fetchShopProducts(client: AdibilisClient): Promise<ShopProductRe
  * satellite which products exist behind the listing.
  */
 export function fetchShopProduct(client: AdibilisClient, id: number): Promise<ShopProductResponse> {
-    return client.get<ShopProductResponse>(`/api/shop/products/${id}`);
+    return client.get<ShopProductResponse>(`/api/shop/product/${id}`);
 }

@@ -343,8 +343,8 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 |---|---|
 | `GET /api/website/ping` | the health check (`checkCore`); no module gate, constant answer |
 | `GET /api/shop/holidays` | 404 while the `shop` module is disabled |
-| `GET /api/shop/products` | the products listed on satellites; 403 while satellites are disabled |
-| `GET /api/shop/products/{id}` | 404 unless that product is listed |
+| `GET /api/shop/product` | the products listed on satellites; 403 while satellites are disabled |
+| `GET /api/shop/product/{id}` | 404 unless that product is listed |
 | `POST /api/payment/checkout` | creates the order and its Stripe invoice (`startCheckout`) |
 | `GET /api/payment/order` | the order's payment state (`getOrderStatus`) |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |
