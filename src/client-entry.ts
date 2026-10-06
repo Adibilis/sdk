@@ -14,5 +14,6 @@ export type {
 } from './order/order-details.js';
 export { isHoliday } from './shop/holidays-client.js';
 export type { HolidayRange } from './shop/holidays-client.js';
-export { priceIn, shopImageUrl } from './shop/product-image.js';
+export { priceIn, shopImageUrl, vatNoteOf } from './shop/product-image.js';
+export type { VatNote } from './shop/product-image.js';
 export type { ProductPriceResponse, ShopProductImageResponse, ShopProductResponse } from '@adbls/api-types';
