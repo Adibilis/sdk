@@ -14,3 +14,22 @@ export function priceIn<T extends { currency: string }>(prices: readonly T[], cu
     const code = currency.toUpperCase();
     return prices.find((price) => price.currency.toUpperCase() === code);
 }
+
+/** How a product's price relates to VAT: `'included'` (BRUTTO), `'excluded'` (NETTO, added at checkout). */
+export type VatNote = 'included' | 'excluded';
+
+/**
+ * What to say about VAT next to a product's price: `'included'` ("incl. VAT"), `'excluded'`
+ * ("excl. VAT, added at checkout") or `null` for a VAT-exempt product, which says nothing. The SDK
+ * bundles no language — the site words the result.
+ *
+ * Takes only the two fields it reads, so it works on a core that predates product VAT: with neither
+ * field sent, prices always included VAT, hence `'included'`.
+ */
+export function vatNoteOf(product: {
+    priceMode?: 'BRUTTO' | 'NETTO' | null;
+    vatExempt?: boolean | null;
+}): VatNote | null {
+    if (product.vatExempt) return null;
+    return product.priceMode === 'NETTO' ? 'excluded' : 'included';
+}

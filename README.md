@@ -79,13 +79,16 @@ in each currency the shop sells in.
 
 ```typescript
 import { createAdibilisClient, fetchShopProducts, fetchShopProduct } from '@adbls/sdk/server';
-import { priceIn, shopImageUrl } from '@adbls/sdk';
+import { priceIn, shopImageUrl, vatNoteOf } from '@adbls/sdk';
 
 const products = await fetchShopProducts(core);          // every listed product, by title
 const one = await fetchShopProduct(core, 12);            // 404 unless listed
 
 const chf = priceIn(one.prices, 'CHF')?.amount;         // prices carry upper-case ISO codes
 const src = shopImageUrl(process.env.ADIBILIS_BASE_URL!, one.mainImagePath!);
+
+const vat = vatNoteOf(one);                              // 'included' | 'excluded' | null
+const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl. VAT, added at checkout') : null;
 ```
 
 - **403 while satellites are off**, on both calls — a satellite pointed at a misconfigured install
@@ -94,11 +97,20 @@ const src = shopImageUrl(process.env.ADIBILIS_BASE_URL!, one.mainImagePath!);
 - **Images need no key.** `mainImagePath` and `images[].path` are paths on core
   (`/api/public/media/product/{id}/{file}`), served anonymously and cached for a day. Compose the
   absolute URL on the server and hand it to the page as a prop.
+- **VAT is the product's, the wording is yours.** `vatNoteOf(product)` answers `'included'`
+  (`priceMode: 'BRUTTO'`, the price already contains VAT), `'excluded'` (`'NETTO'`, VAT is added on
+  top at checkout) or `null` for a VAT-exempt product, which shows no note. The SDK bundles no
+  language, so the site words it. Each price also carries a `vatRate` (percent, `null` when
+  exempt), but don't show it by default: an account with Stripe automatic tax charges the rate of
+  the buyer's country, which can differ from it. This needs a core release with product VAT; an
+  older core sends neither field and reads as VAT-included, which is what its prices always were.
 - **Checkout prices come from here too.** Put `productId` on an order line and core prices it from
   the product's price in the order's `currency`, ignoring `unitPrice`, and recomputes `grandTotal`.
   A product with no price in that currency is refused (`SHOP_PRODUCT_NOT_PRICED`) before any order
   exists. Core routes the invoice to the Stripe account configured for that currency, so the
   `publishableKey` in the checkout response can differ between a CHF and a EUR order.
+- **`taxAmount` is always the order's VAT total** — Stripe's figure on an account with automatic
+  tax, core's own otherwise. It used to be `0` unless automatic tax was on.
 
 ## Properties
 

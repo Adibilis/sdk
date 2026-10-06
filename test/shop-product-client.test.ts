@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AdibilisApiError } from '../src/client/errors';
 import { createAdibilisClient } from '../src/client/api-client';
 import { fetchShopProduct, fetchShopProducts } from '../src/shop/product-client';
-import { priceIn, shopImageUrl } from '../src/shop/product-image';
+import { priceIn, shopImageUrl, vatNoteOf } from '../src/shop/product-image';
 
 const product = {
     id: 12,
@@ -75,5 +75,26 @@ describe('priceIn', () => {
     it('finds the price for a currency whatever its case', () => {
         expect(priceIn(product.prices, 'eur')).toEqual({ currency: 'EUR', amount: 95 });
         expect(priceIn(product.prices, 'USD')).toBeUndefined();
+    });
+});
+
+describe('vatNoteOf', () => {
+    it('reads BRUTTO as included and NETTO as excluded', () => {
+        expect(vatNoteOf({ priceMode: 'BRUTTO', vatExempt: false })).toBe('included');
+        expect(vatNoteOf({ priceMode: 'NETTO', vatExempt: false })).toBe('excluded');
+    });
+
+    it('says nothing for an exempt product, whatever its price mode', () => {
+        expect(vatNoteOf({ priceMode: 'BRUTTO', vatExempt: true })).toBeNull();
+        expect(vatNoteOf({ priceMode: 'NETTO', vatExempt: true })).toBeNull();
+    });
+
+    it('reads a core without product VAT (fields absent or null) as included', () => {
+        expect(vatNoteOf({})).toBe('included');
+        expect(vatNoteOf({ priceMode: null, vatExempt: null })).toBe('included');
+    });
+
+    it('accepts a ShopProductResponse', () => {
+        expect(vatNoteOf(product)).toBe('included');
     });
 });
