@@ -85,8 +85,12 @@ so it can differ between a CHF and a EUR cart.
 
 The preview's order fields (`orderId`, `clientSecret`, `invoiceId`, ...) are all `null` and
 `preview` is `true`. It is validated and refused like `startCheckout` — same endpoint, so
-`returnUrl` is required here too. With automatic tax on, core takes the tax from the billing
-person's address (a Stripe rejection of it surfaces as a 400 `PAYMENT_PROVIDER_ERROR`).
+`returnUrl` is required here too. With automatic tax on, core taxes the order's own address, never
+one stored on a known buyer: the delivery person's address when the order has one (goods are
+shipped), otherwise the billing person's. Send the preview the same delivery and billing addresses
+the real checkout will carry; only the country is required. A Stripe rejection of the address
+(e.g. `customer_tax_location_invalid` where a postal code is needed) surfaces as a 400
+`PAYMENT_PROVIDER_ERROR`.
 `expectedAmount` is optional; without it core does not check the total.
 
 Core, not the shop, holds the Stripe secret key, receives the webhook, marks the order paid and

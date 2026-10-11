@@ -74,7 +74,8 @@ export async function startCheckout(client: AdibilisClient, request: CheckoutSta
  * `startCheckout` with `expectedAmount: preview.amount`.
  *
  * Validated and refused like `startCheckout` (same endpoint, same payload), so `returnUrl` is
- * required here too. With automatic tax on, the billing person's address decides the tax.
+ * required here too. With automatic tax on, the order's delivery address decides the tax, or the
+ * billing address when there is no delivery person — send the same addresses the checkout will.
  */
 export async function previewCheckout(client: AdibilisClient, request: Omit<CheckoutRequest, 'preview'>): Promise<CheckoutPreview> {
     const payload = { ...CheckoutRequestModel.parse({ ...request, preview: true }), preview: true };
