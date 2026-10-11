@@ -6,7 +6,7 @@ import { AdibilisApiError } from '../client/errors.js';
 export type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse };
 
 /** `CheckoutRequest` plus the grand total the shop showed — typed here until `@adbls/api-types` carries it. */
-export type CheckoutStartRequest = CheckoutRequest & {
+export type CheckoutStartRequest = Omit<CheckoutRequest, 'preview'> & {
     /** Core refuses with 409 `CHECKOUT_AMOUNT_CHANGED` when the invoice would total something else. */
     expectedAmount?: number;
 };
@@ -58,8 +58,12 @@ export async function startCheckout(client: AdibilisClient, request: CheckoutSta
     // async so a validation failure is a rejection like every other failure, not a synchronous throw
     // a caller handling only the promise would miss
     const { expectedAmount, ...rest } = request;
-    // the generated schema strips keys it does not know, so the extras are added after parsing
-    const payload = { ...CheckoutRequestModel.parse(rest), ...(expectedAmount === undefined ? {} : { expectedAmount }) };
+    // preview is parsed for the api-types that require it and re-added for those that strip it as unknown
+    const payload = {
+        ...CheckoutRequestModel.parse({ ...rest, preview: false }),
+        preview: false,
+        ...(expectedAmount === undefined ? {} : { expectedAmount }),
+    };
     return client.post<CheckoutResponse>('/api/payment/checkout', payload);
 }
 
@@ -72,8 +76,8 @@ export async function startCheckout(client: AdibilisClient, request: CheckoutSta
  * Validated and refused like `startCheckout` (same endpoint, same payload), so `returnUrl` is
  * required here too. With automatic tax on, the billing person's address decides the tax.
  */
-export async function previewCheckout(client: AdibilisClient, request: CheckoutRequest): Promise<CheckoutPreview> {
-    const payload = { ...CheckoutRequestModel.parse(request), preview: true };
+export async function previewCheckout(client: AdibilisClient, request: Omit<CheckoutRequest, 'preview'>): Promise<CheckoutPreview> {
+    const payload = { ...CheckoutRequestModel.parse({ ...request, preview: true }), preview: true };
     return client.post<CheckoutPreview>('/api/payment/checkout', payload);
 }
 

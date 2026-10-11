@@ -36,7 +36,17 @@ describe('startCheckout', () => {
         expect(client.post).toHaveBeenCalledWith('/api/payment/checkout', {
             order,
             returnUrl: 'https://shop.example/checkout/return',
+            preview: false,
         });
+    });
+
+    it('sends preview false even when a caller slips preview true in', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+        const sneaky = { order, returnUrl: 'https://shop.example/r', preview: true } as Parameters<typeof startCheckout>[1];
+
+        await startCheckout(client, sneaky);
+
+        expect(client.post).toHaveBeenCalledWith('/api/payment/checkout', expect.objectContaining({ preview: false }));
     });
 
     it('rejects an invalid payload before any request is made', async () => {
@@ -66,6 +76,7 @@ describe('startCheckout expectedAmount', () => {
         expect(client.post).toHaveBeenCalledWith('/api/payment/checkout', {
             order,
             returnUrl: 'https://shop.example/r',
+            preview: false,
             expectedAmount: 10.5,
         });
     });
