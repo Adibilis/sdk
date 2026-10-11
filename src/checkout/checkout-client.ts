@@ -1,8 +1,39 @@
 import { CheckoutRequestModel } from '@adbls/api-types';
 import type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse } from '@adbls/api-types';
 import type { AdibilisClient } from '../client/api-client.js';
+import { AdibilisApiError } from '../client/errors.js';
 
 export type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse };
+
+/** `CheckoutRequest` plus the grand total the shop showed — typed here until `@adbls/api-types` carries it. */
+export type CheckoutStartRequest = CheckoutRequest & {
+    /** Core refuses with 409 `CHECKOUT_AMOUNT_CHANGED` when the invoice would total something else. */
+    expectedAmount?: number;
+};
+
+/**
+ * What a preview answers: the totals of a checkout that was never created. Every order field is
+ * `null` — there is no order, invoice or client secret yet. `publishableKey` is the Stripe account
+ * the currency routes to, which is what Elements in deferred mode needs before any order exists.
+ */
+export interface CheckoutPreview {
+    orderId: null;
+    orderNumber: null;
+    orderStatus: null;
+    clientSecret: null;
+    invoiceId: null;
+    hostedInvoiceUrl: null;
+    invoicePdfUrl: null;
+    publishableKey: string;
+    /** Grand total in major units (`10.8`, not cents). */
+    amount: number;
+    taxAmount: number;
+    /** The uniform VAT rate in percent, or `null` when the cart mixes rates. */
+    vatRate: number | null;
+    /** Lower-case ISO code, as Stripe wants it. */
+    currency: string;
+    preview: true;
+}
 
 /**
  * Creates the order in core and opens its Stripe invoice. The response carries everything the
@@ -23,11 +54,41 @@ export type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse };
  * Optional response fields (`hostedInvoiceUrl`, `invoicePdfUrl`, ...) arrive as JSON `null`, not
  * as absent keys — check for both.
  */
-export async function startCheckout(client: AdibilisClient, request: CheckoutRequest): Promise<CheckoutResponse> {
+export async function startCheckout(client: AdibilisClient, request: CheckoutStartRequest): Promise<CheckoutResponse> {
     // async so a validation failure is a rejection like every other failure, not a synchronous throw
     // a caller handling only the promise would miss
-    const payload = CheckoutRequestModel.parse(request);
+    const { expectedAmount, ...rest } = request;
+    // the generated schema strips keys it does not know, so the extras are added after parsing
+    const payload = { ...CheckoutRequestModel.parse(rest), ...(expectedAmount === undefined ? {} : { expectedAmount }) };
     return client.post<CheckoutResponse>('/api/payment/checkout', payload);
+}
+
+/**
+ * Prices the cart exactly as `startCheckout` would invoice it and creates nothing: no order, no
+ * contact, no Stripe customer or invoice. Show `amount` as the total, mount Elements in deferred
+ * mode with `publishableKey`, `amount` (in minor units) and `currency`, and only on "Pay" call
+ * `startCheckout` with `expectedAmount: preview.amount`.
+ *
+ * Validated and refused like `startCheckout` (same endpoint, same payload), so `returnUrl` is
+ * required here too. With automatic tax on, the billing person's address decides the tax.
+ */
+export async function previewCheckout(client: AdibilisClient, request: CheckoutRequest): Promise<CheckoutPreview> {
+    const payload = { ...CheckoutRequestModel.parse(request), preview: true };
+    return client.post<CheckoutPreview>('/api/payment/checkout', payload);
+}
+
+/**
+ * The new grand total when `error` is core's refusal of a checkout whose `expectedAmount` no longer
+ * matches (409 `CHECKOUT_AMOUNT_CHANGED`), otherwise `null`. Core has already voided the invoice,
+ * so refresh the preview, tell the buyer the price changed and let them pay again.
+ */
+export function amountChangedOf(error: unknown): number | null {
+    if (!(error instanceof AdibilisApiError) || error.status !== 409) return null;
+    const errorList = (error.body as { errorList?: Record<string, unknown> } | null)?.errorList;
+    const param = errorList?.['CHECKOUT_AMOUNT_CHANGED'];
+    if (!Array.isArray(param) || param.length === 0) return null;
+    const amount = Number(param[0]);
+    return Number.isFinite(amount) ? amount : null;
 }
 
 /**
