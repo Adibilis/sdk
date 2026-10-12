@@ -44,32 +44,65 @@ mistakes:
 
 ## Checkout
 
-Two server-side calls, both on `@adbls/sdk/server`, are the whole payment integration:
+The payment integration is server-side calls on `@adbls/sdk/server` plus Stripe Elements in the
+browser. The order — and its Stripe invoice — only comes into being when the buyer clicks "Pay";
+until then a **preview** prices the cart and creates nothing.
 
 ```typescript
-import { createAdibilisClient, startCheckout, getOrderStatus } from '@adbls/sdk/server';
+import { createAdibilisClient, previewCheckout, startCheckout, amountChangedOf, getOrderStatus } from '@adbls/sdk/server';
 
 const core = createAdibilisClient({ baseUrl: process.env.ADIBILIS_BASE_URL!, apiKey: process.env.ADIBILIS_API_KEY! });
-
-// 1. From your checkout route handler: create the order, get what Stripe Elements needs.
-const { clientSecret, publishableKey, orderNumber } = await startCheckout(core, {
-    order,                                   // OrderIngestRequest; startCheckout validates it with the generated zod schema
+const request = {
+    order,                                   // OrderIngestRequest; validated with the generated zod schema
     returnUrl: 'https://shop.example/checkout/return?ref=' + order.externalRef,
-});
+};
 
-// 2. From your success page's route handler: the truth is core's, not the browser's.
+// 1. Whenever the cart, country or an address field that affects tax changes: price it.
+//    Nothing is created. amount/taxAmount are major units, vatRate is null for mixed rates.
+const preview = await previewCheckout(core, request);
+// preview.amount, preview.taxAmount, preview.vatRate, preview.currency (lower-case), preview.publishableKey
+
+// 2. On "Pay": create the order and its invoice, refusing if the total moved since the preview.
+try {
+    const { clientSecret } = await startCheckout(core, { ...request, expectedAmount: preview.amount });
+    // hand clientSecret to the browser: stripe.confirmPayment({ elements, clientSecret, confirmParams: { return_url } })
+} catch (error) {
+    const newAmount = amountChangedOf(error); // number on 409 CHECKOUT_AMOUNT_CHANGED, otherwise null
+    if (newAmount === null) throw error;
+    // core already voided the invoice: preview again, tell the buyer the price changed, let them pay again
+}
+
+// 3. From your success page's route handler: the truth is core's, not the browser's.
 const { orderStatus } = await getOrderStatus(core, order.externalSource, order.externalRef); // 'PAID' once the webhook landed
 ```
 
-Core, not the shop, holds the Stripe secret key, receives the webhook, marks the order paid and
-mails the buyer. The shop keeps only `@stripe/stripe-js` to render the payment element with the
-`clientSecret`, and `returnUrl` must sit on the shop URL (or an allowed extra origin) configured
-in core's payment settings.
+**Elements in deferred mode.** There is no `clientSecret` before "Pay", so mount Elements from the
+preview: `loadStripe(preview.publishableKey)` and
+`<Elements options={{ mode: 'payment', amount: Math.round(preview.amount * 100), currency: preview.currency }}>`
+(`amount` in minor units). On "Pay" call `elements.submit()`, then `startCheckout`, then
+`stripe.confirmPayment({ elements, clientSecret, ... })`. The publishable key follows the currency,
+so it can differ between a CHF and a EUR cart.
 
-`(externalSource, externalRef)` is the order's identity: mint `externalRef` once per cart and reuse
-it for a retry — core resumes the same order and invoice and **ignores the new payload**, so a
-declined card never produces a second charge, and a changed cart needs a new reference. Sending a
-pair whose invoice is already paid is refused.
+The preview's order fields (`orderId`, `clientSecret`, `invoiceId`, ...) are all `null` and
+`preview` is `true`. It is validated and refused like `startCheckout` — same endpoint, so
+`returnUrl` is required here too. With automatic tax on, core taxes the order's own address, never
+one stored on a known buyer: the delivery person's address when the order has one (goods are
+shipped), otherwise the billing person's. Send the preview the same delivery and billing addresses
+the real checkout will carry; only the country is required. A Stripe rejection of the address
+(e.g. `customer_tax_location_invalid` where a postal code is needed) surfaces as a 400
+`PAYMENT_PROVIDER_ERROR`.
+`expectedAmount` is optional; without it core does not check the total.
+
+Core, not the shop, holds the Stripe secret key, receives the webhook, marks the order paid and
+mails the buyer. The shop keeps only `@stripe/stripe-js` / `@stripe/react-stripe-js`, and
+`returnUrl` must sit on the shop URL (or an allowed extra origin) configured in core's payment
+settings.
+
+`(externalSource, externalRef)` is the order's identity: mint `externalRef` once per cart state and
+reuse it for a retry with another card — core resumes the same order and invoice and **ignores the
+new payload**, so a declined card never produces a second charge. A resumed attempt is checked
+against `expectedAmount` too. A changed cart or address needs a new reference (the old order stays
+`PENDING_PAYMENT`). Sending a pair whose invoice is already paid is refused.
 
 ## Shop catalog
 
@@ -357,7 +390,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/shop/holidays` | 404 while the `shop` module is disabled |
 | `GET /api/shop/product` | the products listed on satellites; 403 while satellites are disabled |
 | `GET /api/shop/product/{id}` | 404 unless that product is listed |
-| `POST /api/payment/checkout` | creates the order and its Stripe invoice (`startCheckout`) |
+| `POST /api/payment/checkout` | creates the order and its Stripe invoice (`startCheckout`), or with `preview: true` only prices it (`previewCheckout`) |
 | `GET /api/payment/order` | the order's payment state (`getOrderStatus`) |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |
 | `GET /api/property/published` | one page of the properties with a live `OWN_WEBSITE` listing |

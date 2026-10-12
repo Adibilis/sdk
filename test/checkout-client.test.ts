@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { getOrderStatus, startCheckout } from '../src/checkout/checkout-client';
+import { AdibilisApiError } from '../src/client/errors';
+import { amountChangedOf, getOrderStatus, previewCheckout, startCheckout } from '../src/checkout/checkout-client';
 
 const order = {
     externalRef: 'cart-7f3a',
@@ -35,7 +36,17 @@ describe('startCheckout', () => {
         expect(client.post).toHaveBeenCalledWith('/api/payment/checkout', {
             order,
             returnUrl: 'https://shop.example/checkout/return',
+            preview: false,
         });
+    });
+
+    it('sends preview false even when a caller slips preview true in', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+        const sneaky = { order, returnUrl: 'https://shop.example/r', preview: true } as Parameters<typeof startCheckout>[1];
+
+        await startCheckout(client, sneaky);
+
+        expect(client.post).toHaveBeenCalledWith('/api/payment/checkout', expect.objectContaining({ preview: false }));
     });
 
     it('rejects an invalid payload before any request is made', async () => {
@@ -53,6 +64,79 @@ describe('startCheckout', () => {
 
         await expect(startCheckout(client, { order, returnUrl: '' })).rejects.toBeInstanceOf(ZodError);
         expect(client.post).not.toHaveBeenCalled();
+    });
+});
+
+describe('startCheckout expectedAmount', () => {
+    it('sends the amount the shop showed, which a plain request does not carry', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await startCheckout(client, { order, returnUrl: 'https://shop.example/r', expectedAmount: 10.5 });
+
+        expect(client.post).toHaveBeenCalledWith('/api/payment/checkout', {
+            order,
+            returnUrl: 'https://shop.example/r',
+            preview: false,
+            expectedAmount: 10.5,
+        });
+    });
+});
+
+describe('previewCheckout', () => {
+    const preview = {
+        orderId: null,
+        orderNumber: null,
+        orderStatus: null,
+        clientSecret: null,
+        invoiceId: null,
+        hostedInvoiceUrl: null,
+        invoicePdfUrl: null,
+        publishableKey: 'pk_test_abc',
+        amount: 10,
+        taxAmount: 0.75,
+        vatRate: 8.1,
+        currency: 'chf',
+        preview: true,
+    };
+
+    it('posts the same body with preview set and returns the totals', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(preview) };
+
+        await expect(previewCheckout(client, { order, returnUrl: 'https://shop.example/r' })).resolves.toEqual(preview);
+
+        expect(client.post).toHaveBeenCalledWith('/api/payment/checkout', {
+            order,
+            returnUrl: 'https://shop.example/r',
+            preview: true,
+        });
+    });
+
+    it('validates the payload before any request is made', async () => {
+        const client = { get: vi.fn(), post: vi.fn() };
+
+        await expect(previewCheckout(client, { order, returnUrl: '' })).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+});
+
+describe('amountChangedOf', () => {
+    const refusal = (status: number, errorList: unknown) =>
+        new AdibilisApiError(status, { error: 'x', errorList, url: '/api/payment/checkout' }, '/api/payment/checkout');
+
+    it('returns the new amount of a 409 CHECKOUT_AMOUNT_CHANGED', () => {
+        expect(amountChangedOf(refusal(409, { CHECKOUT_AMOUNT_CHANGED: ['10.80'] }))).toBe(10.8);
+    });
+
+    it.each([
+        ['another status', refusal(400, { CHECKOUT_AMOUNT_CHANGED: ['10.80'] })],
+        ['another key', refusal(409, { SOMETHING_ELSE: ['10.80'] })],
+        ['no param', refusal(409, { CHECKOUT_AMOUNT_CHANGED: [] })],
+        ['a non-number param', refusal(409, { CHECKOUT_AMOUNT_CHANGED: ['soon'] })],
+        ['a body without errorList', new AdibilisApiError(409, 'conflict', '/p')],
+        ['a foreign error', new Error('boom')],
+        ['a non-error', null],
+    ])('returns null for %s', (_name, error) => {
+        expect(amountChangedOf(error)).toBeNull();
     });
 });
 
