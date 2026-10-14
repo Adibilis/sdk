@@ -2,6 +2,8 @@
 // with no React at all — otherwise the optional `react` peer is optional in name only, since a
 // barrel re-export pulls it in eagerly. A non-React shop simply never imports this subpath.
 export { CheckoutProvider, useCheckout } from './checkout/checkout-context.js';
+export { KEYBOARD_HEIGHT_PROPERTY, useKeyboardClearance } from './checkout/keyboard-clearance.js';
+export type { KeyboardClearanceOptions } from './checkout/keyboard-clearance.js';
 export type {
     CheckoutContextValue,
     CheckoutStep,
