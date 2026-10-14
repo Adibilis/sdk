@@ -104,6 +104,38 @@ new payload**, so a declined card never produces a second charge. A resumed atte
 against `expectedAmount` too. A changed cart or address needs a new reference (the old order stays
 `PENDING_PAYMENT`). Sending a pair whose invoice is already paid is refused.
 
+### The form under a phone keyboard
+
+Phones open the keyboard over the page without making the page any longer, so the last fields of
+a long checkout form end up unreachable, and a field the browser scrolls "into view" lands right
+on the keyboard's edge with nothing visible below it. `useKeyboardClearance` (on
+`@adbls/sdk/checkout`) fixes both for whatever form you hand it:
+
+```tsx
+'use client';
+import { useRef } from 'react';
+import { useKeyboardClearance } from '@adbls/sdk/checkout';
+
+function CheckoutForm() {
+    const form = useRef<HTMLDivElement>(null);
+    // Place a focused field 48px under the sticky header: room for its label
+    useKeyboardClearance(form, { offsetTop: () => headerHeight() + 48 });
+    return <div ref={form}>…</div>;
+}
+```
+
+```css
+/* On the page: whatever bottom padding you have, plus the keyboard while it is open */
+.checkout { padding-bottom: calc(10rem + var(--keyboard-height, 0px)); }
+```
+
+While a keyboard is open, `--keyboard-height` on `<html>` is its height (measured from the visual
+viewport; a pinch-zoom is not a keyboard), so the page gains exactly the scroll room it needs. On
+each focus inside the container the field is scrolled to `offsetTop` once the keyboard has
+settled, never before, so the browser's own scroll does not fight it. It does nothing on a desktop.
+Verified on iOS Safari and Chrome Android, both of which keep `fixed` elements in the layout
+viewport, behind the keyboard — a fixed bottom bar stays out of the way.
+
 ## Shop catalog
 
 A satellite shop sells what core lists for it. An admin enables satellites once (Settings →
