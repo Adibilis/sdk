@@ -57,3 +57,5 @@ export type {
     SubscriptionDeliverySkipReason,
     SubscriptionDeliveryStatus,
 } from './customer/types.js';
+export { configurationObjectOf, PAUSE_HORIZON_DAYS, plansForChange, resumeDateRange, scheduleChangeOf } from './customer/rules.js';
+export type { ScheduleChangeCheck } from './customer/rules.js';
