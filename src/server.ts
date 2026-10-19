@@ -69,3 +69,11 @@ export type {
     CustomerSubscriptionDetail,
     CustomerTransaction,
 } from './customer/types.js';
+export {
+    CUSTOMER_SESSION_COOKIE,
+    exchangeLoginToken,
+    expiredCustomerSessionCookie,
+    MAX_SESSION_TOKEN_LENGTH,
+    requestLoginLink,
+} from './customer/session.js';
+export type { CustomerLoginLinkRequest, CustomerSessionCookie, CustomerSignIn } from './customer/session.js';
