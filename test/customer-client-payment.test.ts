@@ -5,7 +5,7 @@ import { customerFromCookies } from '../src/customer/customer-client';
 import type { CustomerClient } from '../src/customer/customer-client';
 
 const TOKEN = 'k3Jx9QvUeR2m1sYtPz8aLwB4nC7dF0gH5iJ6oK_-abc';
-const callHeaders = { headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-Session': TOKEN } };
+const callHeaders = { headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-Session': TOKEN }, cache: 'no-store' };
 const PATH = '/api/customer/subscription/9/payment-method';
 
 const mockClient = () => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() });

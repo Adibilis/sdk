@@ -6,7 +6,7 @@ import { customerFromCookies } from '../src/customer/customer-client';
 
 const TOKEN = 'k3Jx9QvUeR2m1sYtPz8aLwB4nC7dF0gH5iJ6oK_-abc';
 const visitor = { clientIp: '203.0.113.7' };
-const callHeaders = { headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-Session': TOKEN } };
+const callHeaders = { headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-Session': TOKEN }, cache: 'no-store' };
 
 const page = { content: [], number: 0, size: 20, totalPages: 0, totalElements: 0 };
 
@@ -33,6 +33,24 @@ describe('customerFromCookies', () => {
         const client = mockClient();
         expect(customerFromCookies(client, cookies, visitor)).toBeNull();
         expect(client.get).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['a newline', 'abc\ndef'],
+        ['a character above 255', 'abc\u0100def'],
+        ['a space inside', 'abc def'],
+    ])('is null for a store value with %s', (_name, value) => {
+        expect(customerFromCookies(mockClient(), { get: () => ({ value }) }, visitor)).toBeNull();
+    });
+
+    it('takes the last of two cookies of that name in a raw header, as Next’s cookie store does', async () => {
+        const client = mockClient();
+        client.get.mockResolvedValue({});
+        const customer = customerFromCookies(client, `adbl_customer=first; adbl_customer=${TOKEN}`, visitor)!;
+
+        await customer.getSubscription(1);
+
+        expect(client.get.mock.calls[0][1].headers['X-Customer-Session']).toBe(TOKEN);
     });
 
     it('never exposes the session token on the client object', () => {
@@ -120,6 +138,16 @@ describe('reads', () => {
         expect(headers['X-Customer-Session']).toBe(TOKEN);
         expect(headers['X-API-Secret-Key']).toBe('k');
         expect(fetchMock.mock.calls[0][0]).toBe('https://core.test/api/customer/subscription/77');
+    });
+
+    it('never lets a cache answer for the customer', async () => {
+        const fetchMock = vi.fn().mockImplementation(async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }));
+        const customer = customerFromCookies(createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock }), `adbl_customer=${TOKEN}`, visitor)!;
+
+        await customer.getSubscription(77);
+        await customer.cancel(77, { atPeriodEnd: true });
+
+        for (const call of fetchMock.mock.calls) expect(call[1].cache).toBe('no-store');
     });
 });
 

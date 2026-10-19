@@ -5,7 +5,7 @@ import { customerFromCookies, SubscriptionUpdateError } from '../src/customer/cu
 import type { CustomerClient, CustomerDeliveryPerson } from '../src/customer/customer-client';
 
 const TOKEN = 'k3Jx9QvUeR2m1sYtPz8aLwB4nC7dF0gH5iJ6oK_-abc';
-const callHeaders = { headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-Session': TOKEN } };
+const callHeaders = { headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-Session': TOKEN }, cache: 'no-store' };
 const BASE = '/api/customer/subscription/9';
 const detail = { id: 9, number: 'SU-2026-0009' };
 const tueFri = { kind: 'WEEKLY', weekdays: ['TUE', 'FRI'], everyNWeeks: 1 } as const;
@@ -150,5 +150,29 @@ describe('updateSubscription', () => {
         const { customer } = signedIn();
 
         await expect(customer.updateSubscription(9, {})).rejects.toBeInstanceOf(RangeError);
+    });
+});
+
+describe('SubscriptionUpdateError outcome', () => {
+    const failing = (cause: unknown) => {
+        const { client, customer } = signedIn();
+        client.patch.mockResolvedValueOnce(detail).mockRejectedValueOnce(cause);
+        return customer.updateSubscription(9, { planId: 4, schedule: tueFri }).catch((e: unknown) => e as SubscriptionUpdateError);
+    };
+
+    it.each([
+        ['a 409 NOT_ALLOWED', refusal(409, 'SUBSCRIPTION_ACTION_NOT_ALLOWED', ['PAST_DUE']), 'refused'],
+        ['a 400 violation', refusal(400, 'SUBSCRIPTION_BILLING_INTERVAL_CHANGE'), 'refused'],
+        ['a 404', refusal(404, 'SUBSCRIPTION_NOT_FOUND'), 'refused'],
+        ['a 409 CONCURRENT_UPDATE_CONFLICT', refusal(409, 'CONCURRENT_UPDATE_CONFLICT'), 'unknown'],
+        ['a 504 from a proxy', new AdibilisApiError(504, '<html>', BASE), 'unknown'],
+        ['a 500', refusal(500, 'INTERNAL'), 'unknown'],
+        ['a network TypeError', new TypeError('fetch failed'), 'unknown'],
+    ])('is %s -> %s', async (_name, cause, outcome) => {
+        const error = (await failing(cause)) as SubscriptionUpdateError;
+
+        expect(error).toBeInstanceOf(SubscriptionUpdateError);
+        expect(error.outcome).toBe(outcome);
+        expect(error.failed).toBe('schedule');
     });
 });

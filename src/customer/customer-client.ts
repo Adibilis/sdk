@@ -15,6 +15,7 @@ import {
 } from '../subscription/wire.js';
 import type { CustomerDeliveryPersonRequest, SchedulePattern } from '../subscription/wire.js';
 import { CUSTOMER_SESSION_COOKIE, MAX_SESSION_TOKEN_LENGTH } from './session.js';
+import { AdibilisApiError } from '../client/errors.js';
 import type {
     CustomerPage,
     CustomerPaymentMethodSetup,
@@ -27,6 +28,7 @@ import type {
 const SESSION_HEADER = 'X-Customer-Session';
 const SUBSCRIPTION_PATH = '/api/customer/subscription';
 const MAX_PAGE_SIZE = 200;
+const SESSION_TOKEN_SHAPE = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_SESSION_TOKEN_LENGTH}}$`);
 
 /** What `customerFromCookies` reads: Next's `cookies()` and `request.cookies`, or any store with the same `get`. */
 export interface CookieReader {
@@ -70,11 +72,19 @@ export interface CustomerSubscriptionChanges {
 export type CustomerSubscriptionChangePart = 'plan' | 'schedule' | 'configuration' | 'deliveryPerson';
 
 /**
- * `updateSubscription` stopped at `failed` because core refused it (`cause`, an `AdibilisApiError` that `customerRefusalOf`
- * reads). The parts in `applied` are in effect; `detail` is the subscription after the last of them, `null` when none was.
+ * `updateSubscription` stopped at `failed` (`cause` is the error of that call; `customerRefusalOf` reads it when core answered).
+ * The parts in `applied` are in effect; `detail` is the subscription after the last of them, `null` when none was.
+ *
+ * `outcome` says what is known about `failed` itself:
+ * - `'refused'`: core answered 400, 404 or 409 with a code of its own (not `CONCURRENT_UPDATE_CONFLICT`) — the part is not in
+ *   effect.
+ * - `'unknown'`: anything else — `CONCURRENT_UPDATE_CONFLICT` (Stripe has the change), a 5xx or proxy answer (504 and the like),
+ *   a network error or timeout. The part may be in effect: re-read the subscription before showing it as failed or offering
+ *   the change again.
  */
 export class SubscriptionUpdateError extends Error {
     override readonly name = 'SubscriptionUpdateError';
+    readonly outcome: 'refused' | 'unknown';
 
     constructor(
         readonly failed: CustomerSubscriptionChangePart,
@@ -83,7 +93,14 @@ export class SubscriptionUpdateError extends Error {
         override readonly cause: unknown
     ) {
         super(`Subscription update stopped at ${failed}${applied.length > 0 ? ` after ${applied.join(', ')}` : ''}`);
+        this.outcome = isRefusal(cause) ? 'refused' : 'unknown';
     }
+}
+
+function isRefusal(cause: unknown): boolean {
+    if (!(cause instanceof AdibilisApiError) || ![400, 404, 409].includes(cause.status)) return false;
+    const errorList = (cause.body as { errorList?: Record<string, unknown> } | null)?.errorList;
+    return !(errorList != null && typeof errorList === 'object' && 'CONCURRENT_UPDATE_CONFLICT' in errorList);
 }
 
 interface PortalRequest {
@@ -112,11 +129,12 @@ function withQuery(path: string, query: Record<string, number | undefined>): str
 }
 
 function cookieValue(header: string, name: string): string | undefined {
+    let found: string | undefined;
     for (const part of header.split(';')) {
         const separator = part.indexOf('=');
-        if (separator > 0 && part.slice(0, separator).trim() === name) return part.slice(separator + 1).trim();
+        if (separator > 0 && part.slice(0, separator).trim() === name) found = part.slice(separator + 1).trim();
     }
-    return undefined;
+    return found;
 }
 
 const MIN_UNIT_AMOUNT = 0.01;
@@ -176,8 +194,8 @@ export class CustomerClient {
         this.#options = options;
     }
 
-    #init(): { headers: Record<string, string> } {
-        return { headers: { ...shopCallHeaders(this.#options), [SESSION_HEADER]: this.#sessionToken } };
+    #init(): { headers: Record<string, string>; cache: 'no-store' } {
+        return { headers: { ...shopCallHeaders(this.#options), [SESSION_HEADER]: this.#sessionToken }, cache: 'no-store' };
     }
 
     /** The subscriptions the customer pays for, newest first; abandoned checkouts are not among them. */
@@ -351,5 +369,5 @@ export function customerFromCookies(
 ): CustomerClient | null {
     const raw = typeof cookies === 'string' ? cookieValue(cookies, CUSTOMER_SESSION_COOKIE) : cookies?.get(CUSTOMER_SESSION_COOKIE)?.value;
     const token = raw?.trim();
-    return token && token.length <= MAX_SESSION_TOKEN_LENGTH ? new CustomerClient(client, token, options) : null;
+    return token && SESSION_TOKEN_SHAPE.test(token) ? new CustomerClient(client, token, options) : null;
 }
