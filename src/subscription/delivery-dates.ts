@@ -35,7 +35,10 @@ export function validFirstDeliveryDates(terms: DeliveryTerms, pattern: ScheduleP
     return result;
 }
 
-/** Today's ISO date in `timeZone` — core's clock zone, `Europe/Zurich` unless core sets `app.time-zone`. */
+/**
+ * Today's ISO date in `timeZone`. The zone defaults to `Europe/Zurich`: pass core's zone when the instance sets
+ * `app.time-zone` to anything else, or the date is wrong for a few hours every day.
+ */
 export function todayIn(timeZone = 'Europe/Zurich', now: Date = new Date()): string {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
     const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((candidate) => candidate.type === type)?.value ?? '';

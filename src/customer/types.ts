@@ -44,7 +44,16 @@ export interface CustomerPage<T> {
     totalElements: number;
 }
 
-/** A row of the customer's subscriptions: the ones they pay for, newest first. `amount` is per billing period. */
+/*
+ * Dates. `LocalDate` fields are plain `YYYY-MM-DD` strings in core's time zone, with no time and no zone: `nextBillingAt`,
+ * `nextDeliveryAt`, `pausedUntil`, `startDate` (rows and detail) and a delivery's `dueDate`. Show or compare them as strings;
+ * never `new Date('2026-11-03')`, which parses as UTC midnight and shows the day before west of Greenwich. Every other date
+ * field (`currentPeriodStart`, `currentPeriodEnd`, `cancelledAt`, a transaction's `date`, `periodStart`, `periodEnd`,
+ * `expiresAt`) is an instant: an ISO-8601 timestamp that `new Date(…)` reads correctly.
+ */
+
+/**
+ * A row of the customer's subscriptions: the ones they pay for, newest first. `amount` is per billing period. */
 export interface CustomerSubscription {
     id: number;
     number: string;
@@ -57,10 +66,14 @@ export interface CustomerSubscription {
     currency: string;
     billingInterval: BillingInterval;
     billingIntervalCount: number;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     nextDeliveryAt: string | null;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     nextBillingAt: string | null;
     cancelAtPeriodEnd: boolean;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     pausedUntil: string | null;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     startDate: string | null;
 }
 
@@ -82,6 +95,7 @@ export interface CustomerAddress {
 
 export interface CustomerDelivery {
     id: number;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     dueDate: string;
     status: SubscriptionDeliveryStatus;
     /** Who skipped a `SKIPPED` delivery: the customer, the shop (`OWNER`) or a pause; `null` otherwise. */
@@ -121,13 +135,20 @@ export interface CustomerSubscriptionDetail {
     fulfillmentType: FulfillmentType | null;
     leadTimeDays: number;
     deliveryPerson: CustomerAddress | null;
+    /** An instant (ISO-8601 timestamp). */
     currentPeriodStart: string | null;
+    /** An instant (ISO-8601 timestamp). */
     currentPeriodEnd: string | null;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     nextBillingAt: string | null;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     nextDeliveryAt: string | null;
     cancelAtPeriodEnd: boolean;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     pausedUntil: string | null;
+    /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     startDate: string | null;
+    /** An instant (ISO-8601 timestamp). */
     cancelledAt: string | null;
     upcomingDeliveries: CustomerDelivery[];
     /** Read live from Stripe, best effort: `null` when Stripe could not be read, and on a cancelled subscription. */
@@ -148,16 +169,20 @@ export interface CustomerPaymentMethodUpdate {
      * `DECLINED`: the overdue charge failed; the new card stays on file and `hostedInvoiceUrl` lets the customer pay there.
      */
     retry: CustomerPaymentRetry;
+    /** Present only when Stripe has an invoice page to offer: `null` for `DECLINED` and `UNCONFIRMED` without one — then show no link. */
     hostedInvoiceUrl: string | null;
 }
 
 /** One charge: a paid subscription period (`reference` = subscription number) or a paid one-time order (order number). */
 export interface CustomerTransaction {
     kind: CustomerTransactionKind;
+    /** An instant (ISO-8601 timestamp). */
     date: string;
     reference: string;
     subscriptionId: number | null;
+    /** An instant (ISO-8601 timestamp). */
     periodStart: string | null;
+    /** An instant (ISO-8601 timestamp). */
     periodEnd: string | null;
     amount: number;
     currency: string;

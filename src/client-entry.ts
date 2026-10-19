@@ -46,6 +46,8 @@ export type {
     CustomerDelivery,
     CustomerPage,
     CustomerPaymentMethod,
+    CustomerPaymentMethodSetup,
+    CustomerPaymentMethodUpdate,
     CustomerPaymentRetry,
     CustomerPlan,
     CustomerProfile,
@@ -59,3 +61,4 @@ export type {
 } from './customer/types.js';
 export { configurationObjectOf, PAUSE_HORIZON_DAYS, plansForChange, resumeDateRange, scheduleChangeOf } from './customer/rules.js';
 export type { ScheduleChangeCheck } from './customer/rules.js';
+export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';

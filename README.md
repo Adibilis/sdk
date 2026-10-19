@@ -273,6 +273,7 @@ import {
 } from '@adbls/sdk/server';
 // browser-safe — the pickers and forms of the account pages
 import { dynamicUnitAmount, resumeDateRange, scheduleChangeOf, plansForChange, configurationObjectOf, todayIn } from '@adbls/sdk';
+// todayIn() counts in Europe/Zurich; when core sets `app.time-zone`, pass that zone: todayIn('Europe/London')
 
 const visitor = { clientIp: visitorIpOf(request) }; // the visitor's IP literal, as for the checkout
 
@@ -296,12 +297,14 @@ try {
     // "This link was used or has expired", with the form for a new one
 }
 
-// 4. Every account page and handler
+// 4. Every account page and handler (a raw `Cookie` header string works too; with duplicates the last one wins, like Next's store)
 const customer = customerFromCookies(core, await cookies(), visitor);
 if (!customer) return; // no session cookie: redirect to the sign-in page
 const { content } = await customer.listSubscriptions();
 const subscription = await customer.getSubscription(id);
-// 401 CUSTOMER_SESSION_INVALID on any call: clear the cookie and sign in again
+// 401 CUSTOMER_SESSION_INVALID on any call: clear the cookie and sign in again.
+// A server component cannot clear cookies: redirect to a route handler that sets expiredCustomerSessionCookie() and
+// redirects to the sign-in page, or the next request loops on the same dead cookie.
 
 // 5. A change answers the subscription as it is now: render that, do not read it again
 const delivery = subscription.upcomingDeliveries.find((d) => d.skippable);  // the skip button only where skippable
@@ -327,13 +330,34 @@ Links and others) open every link in a mail before the customer does, some with 
 A callback that exchanged the token while rendering would sign the scanner in, and the customer
 would find the link used. Two shapes are allowed, and only these:
 
-- `GET /account/callback?token=…` renders a "Sign in" button that POSTs the token; or
-- the template's flow: the GET callback route does **not** call core. It stores the token in a short
+- `GET /account/callback?token=…` renders a "Sign in" button that POSTs the token (shape 1; its POST
+  handler must be same-origin only, see below); or
+- (shape 2) the template's flow: the GET callback route does **not** call core. It stores the token in a short
   `httpOnly` cookie (a few minutes, `Path` limited to the continue page and the exchange handler,
   `SameSite=Lax`, `Secure`) and redirects to a continue page, so the token leaves the address bar
   and the browser history at once. The continue page renders the "Sign in" button; its POST reads
   the token from that cookie, calls `exchangeLoginToken`, deletes the cookie, sets `adbl_customer`
   and redirects.
+
+**Shape 1's POST must accept only same-origin requests.** The POST carries the token in its body, so
+anyone can build a page that submits *their own* valid token to your handler from the victim's
+browser; the victim is then signed in as the attacker (login CSRF) and may enter their card or
+address into the attacker's account. Refuse the request unless `Origin` equals your shop's origin,
+or `Sec-Fetch-Site` is `same-origin`:
+
+```typescript
+const SHOP_ORIGIN = 'https://shop.example';
+export async function POST(request: Request) {
+    const origin = request.headers.get('origin');
+    const sameOrigin = origin !== null ? origin === SHOP_ORIGIN : request.headers.get('sec-fetch-site') === 'same-origin';
+    if (!sameOrigin) return new Response('Forbidden', { status: 403 });
+    // …then exchangeLoginToken(core, token, visitor)
+}
+```
+
+Shape 2 is immune: the token is not in the request body at all but in the parked cookie, which the
+browser sends only with same-site requests (`SameSite=Lax` with a POST from another site is not
+sent), so a forged cross-site POST finds no token. Keep that cookie's `SameSite` at `Lax` or `Strict`.
 
 Either way the exchange is a POST, the button is a real click (never an auto-submitting form, never
 a script), and the GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
@@ -359,8 +383,15 @@ became of an overdue charge, and there are five outcomes:
 | `NOT_NEEDED` | nothing was overdue | "card updated" |
 | `PAID` | every overdue invoice came back paid; the status turns `ACTIVE` with core's webhook | "card updated, payment received"; read the subscription again in a moment |
 | `PROCESSING` | Stripe took the charge but an invoice is still open (a bank debit in flight) | "payment is being processed"; read the subscription again later |
-| `DECLINED` | the new card was refused for the overdue invoice | the failure, and `hostedInvoiceUrl` to pay or authenticate on Stripe's page |
-| `UNCONFIRMED` | another Stripe error: the outcome is unknown | neither success nor failure; `hostedInvoiceUrl` to check or pay, and read the subscription again |
+| `DECLINED` | the new card was refused for the overdue invoice | the failure, and `hostedInvoiceUrl` (when present) to pay or authenticate on Stripe's page |
+| `UNCONFIRMED` | another Stripe error: the outcome is unknown | neither success nor failure; `hostedInvoiceUrl` (when present) to check or pay, and read the subscription again |
+
+`hostedInvoiceUrl` is present only when Stripe has an invoice page: it is `null` for `NOT_NEEDED`
+and can be `null` for `DECLINED` and `UNCONFIRMED`. Render the link only when it is set.
+
+`PAYMENT_PROVIDER_ERROR` from `confirmPaymentMethod` (400) does not guarantee the card is unchanged:
+Stripe may have applied part of the change before it failed. Read the subscription again and show
+the `paymentMethod` it reports, not an assumption.
 
 Open the SetupIntent when the customer clicks "Change card", not on page load.
 
@@ -388,7 +419,8 @@ Open the SetupIntent when the customer clicks "Change card", not on page load.
   subscription another billing interval (weekly ↔ monthly, every week ↔ every 2 weeks) →
   `SUBSCRIPTION_BILLING_INTERVAL_CHANGE`; otherwise the new `periodAmount` (more weekdays cost
   more). `plansForChange(entries, subscription)` lists the plans a plan change can go to.
-  `resumeDateRange(todayIn())` bounds the pause date picker. Show the skip button only where
+  `resumeDateRange(todayIn())` bounds the pause date picker (`todayIn()` defaults to `Europe/Zurich`;
+  pass core's zone when the instance sets `app.time-zone`). Show the skip button only where
   `delivery.skippable`.
 - **`customerRefusalOf(error)`** reads every refusal; `null` means rethrow.
   `SUBSCRIPTION_ACTION_NOT_ALLOWED` carries `reason`: `CANCELLING` (cancelled at period end — offer
@@ -400,7 +432,11 @@ Open the SetupIntent when the customer clicks "Change card", not on page load.
   `changeDeliveryPerson`. `updateSubscription(id, { planId, schedule, configuration, deliveryPerson })`
   sends them one after another in that order, after checking every part, and when core refuses one
   rejects with a `SubscriptionUpdateError`: `applied` lists what is already in effect, `detail` is
-  the subscription after it, `customerRefusalOf` reads its cause.
+  the subscription after it, `customerRefusalOf` reads its cause. `failed` names the part that
+  stopped, and `outcome` says what is known about it: `'refused'` when core answered 400, 404 or 409
+  with a code of its own (the part is not in effect), `'unknown'` for everything else —
+  `CONCURRENT_UPDATE_CONFLICT`, any 5xx or proxy answer (a 504), a network error or timeout. On
+  `'unknown'` the part may be in effect: read the subscription again before reporting it as failed.
 - **Configuration:** `configurationObjectOf(subscription.configuration)` gives back the object your
   checkout sent. A change sends the object again with its `configurationText`; on a dynamic
   subscription also the new `unitAmount` (`Number(dynamicUnitAmount(lines))`), which core prorates
@@ -712,7 +748,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
 | `POST /api/customer/login-link` | mails a customer a one-time sign-in link (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
 | `POST /api/customer/session` | exchanges the link's token for a 30-day session (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID`; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
-| `DELETE /api/customer/session` | ends the session (`logout`); always 200 |
+| `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
 | `GET /api/customer/subscription[/{id}]`, `GET /api/customer/transaction` | the signed-in customer's subscriptions and payments (`X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
 | `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `POST\|PATCH /api/customer/subscription/{id}/payment-method` | the card change (`beginPaymentMethodUpdate`, `confirmPaymentMethod`); 429 beyond 5 per visitor or 120 per shop server a minute, and beyond 10 SetupIntents per customer an hour |
@@ -770,4 +806,7 @@ the service user holds no grants.
 `2026-07-04T23:27:30.828Z`) — the wire format — since core's zod profile switched to
 `dateAsString`. Earlier builds typed them as `Date`, which `JSON.parse` never produces, so the SDK
 used to redeclare date-bearing shapes; it imports the generated ones now. Compare ISO dates as
-strings (they order lexicographically) or parse them yourself.
+strings (they order lexicographically) or parse them yourself. In the customer portal's responses
+`nextBillingAt`, `nextDeliveryAt`, `pausedUntil`, `startDate` and a delivery's `dueDate` are
+date-only (`YYYY-MM-DD`, core's time zone): never `new Date('2026-11-03')`, which is UTC midnight
+and shows the previous day west of Greenwich. The other timestamps are instants.

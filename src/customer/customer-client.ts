@@ -333,6 +333,8 @@ export class CustomerClient {
      * After `stripe.confirmSetup` succeeded: core re-reads the SetupIntent at Stripe, makes its card the subscription's, and on a
      * past-due subscription retries the unpaid invoices. `setupIntentId` is the intent's id (`seti_...`), never its client secret.
      * 400 `SUBSCRIPTION_SETUP_INTENT_INVALID` for an intent that is not confirmed or not this subscription's. Never retried.
+     * 400 `PAYMENT_PROVIDER_ERROR` does not guarantee the card is unchanged: Stripe may have applied part of the change before
+     * it failed, so re-read the subscription (`paymentMethod`) before telling the customer the old card is still on file.
      *
      * The new card is saved in every case below; `retry` only says what happened to the overdue invoices:
      * - `NOT_NEEDED`: nothing was overdue. Show "card updated".
@@ -350,7 +352,11 @@ export class CustomerClient {
         return this.#client.patch(path, CustomerPaymentMethodRequestModel.parse({ setupIntentId }), init);
     }
 
-    /** Ends the session in core; answers the same for a session that is gone already. Clear the cookie as well, always. */
+    /**
+     * Ends the session in core; answers the same for a session that is gone already. Clear the cookie as well, always. It can
+     * still be refused: 404 `SHOP_MODULE_DISABLED`, 429 `TOO_MANY_REQUESTS` (shared with sign-ins, 30 per visitor a minute) —
+     * clear the cookie anyway.
+     */
     async logout(): Promise<void> {
         const init = this.#init();
         await this.#client.delete<null>('/api/customer/session', init);
