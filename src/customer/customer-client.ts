@@ -76,10 +76,10 @@ export type CustomerSubscriptionChangePart = 'plan' | 'schedule' | 'configuratio
  * The parts in `applied` are in effect; `detail` is the subscription after the last of them, `null` when none was.
  *
  * `outcome` says what is known about `failed` itself:
- * - `'refused'`: core answered 400, 404 or 409 with a code of its own (not `CONCURRENT_UPDATE_CONFLICT`) — the part is not in
- *   effect.
- * - `'unknown'`: anything else — `CONCURRENT_UPDATE_CONFLICT` (Stripe has the change), a 5xx or proxy answer (504 and the like),
- *   a network error or timeout. The part may be in effect: re-read the subscription before showing it as failed or offering
+ * - `'refused'`: core answered 400, 404 or 409, except `CONCURRENT_UPDATE_CONFLICT` and `PAYMENT_PROVIDER_ERROR` — the part is
+ *   not in effect.
+ * - `'unknown'`: anything else — `CONCURRENT_UPDATE_CONFLICT` (Stripe has the change), `PAYMENT_PROVIDER_ERROR` (a Stripe
+ *   timeout or connection error; Stripe may have applied it), a 5xx or proxy answer (504 and the like), a network error or timeout. The part may be in effect: re-read the subscription before showing it as failed or offering
  *   the change again.
  */
 export class SubscriptionUpdateError extends Error {
@@ -100,7 +100,8 @@ export class SubscriptionUpdateError extends Error {
 function isRefusal(cause: unknown): boolean {
     if (!(cause instanceof AdibilisApiError) || ![400, 404, 409].includes(cause.status)) return false;
     const errorList = (cause.body as { errorList?: Record<string, unknown> } | null)?.errorList;
-    return !(errorList != null && typeof errorList === 'object' && 'CONCURRENT_UPDATE_CONFLICT' in errorList);
+    if (errorList == null || typeof errorList !== 'object') return true;
+    return !('CONCURRENT_UPDATE_CONFLICT' in errorList || 'PAYMENT_PROVIDER_ERROR' in errorList);
 }
 
 interface PortalRequest {

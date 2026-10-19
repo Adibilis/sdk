@@ -54,7 +54,7 @@ export type CustomerRefusal =
     | { code: 'SUBSCRIPTION_DELIVERY_ADDRESS_REQUIRED' }
     /** 400: the SetupIntent is not confirmed, or not this subscription's. Start the card change again. */
     | { code: 'SUBSCRIPTION_SETUP_INTENT_INVALID' }
-    /** 400: Stripe refused the change; nothing changed. */
+    /** 400: the Stripe call failed (a refusal, a timeout or a connection error). The outcome is unknown: re-read the subscription. */
     | { code: 'PAYMENT_PROVIDER_ERROR' }
     /** 400: the login link's `returnUrl` is not on one of core's allowed shop origins — a setup error, not the customer's. */
     | { code: 'SHOP_ORIGIN_NOT_ALLOWED' }

@@ -165,6 +165,7 @@ describe('SubscriptionUpdateError outcome', () => {
         ['a 400 violation', refusal(400, 'SUBSCRIPTION_BILLING_INTERVAL_CHANGE'), 'refused'],
         ['a 404', refusal(404, 'SUBSCRIPTION_NOT_FOUND'), 'refused'],
         ['a 409 CONCURRENT_UPDATE_CONFLICT', refusal(409, 'CONCURRENT_UPDATE_CONFLICT'), 'unknown'],
+        ['a 400 PAYMENT_PROVIDER_ERROR', refusal(400, 'PAYMENT_PROVIDER_ERROR'), 'unknown'],
         ['a 504 from a proxy', new AdibilisApiError(504, '<html>', BASE), 'unknown'],
         ['a 500', refusal(500, 'INTERNAL'), 'unknown'],
         ['a network TypeError', new TypeError('fetch failed'), 'unknown'],
