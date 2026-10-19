@@ -37,3 +37,5 @@ export type {
 export { isWellFormedPattern, nextOccurrence, occurrences, validateScheduleChoice } from './subscription/schedule.js';
 export { firstDeliveryDate, START_DATE_HORIZON_DAYS, todayIn, validFirstDeliveryDates } from './subscription/delivery-dates.js';
 export type { DeliveryTerms } from './subscription/delivery-dates.js';
+export { dynamicPeriodAmount, dynamicUnitAmount } from './subscription/pricing.js';
+export type { DynamicPrice } from './subscription/pricing.js';
