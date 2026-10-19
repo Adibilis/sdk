@@ -43,3 +43,4 @@ export type {
     SubscriptionCheckoutStatus,
     SubscriptionPlanPrice,
 } from './subscription/types.js';
+export { fetchSubscriptionPlan, fetchSubscriptionPlans } from './subscription/plan-client.js';
