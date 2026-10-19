@@ -1,0 +1,50 @@
+[
+  {
+    "name": "tue+fri weekly for a month",
+    "pattern": { "kind": "WEEKLY", "weekdays": ["TUE", "FRI"], "everyNWeeks": 1 },
+    "anchor": "2026-10-14", "from": "2026-10-14", "to": "2026-11-14",
+    "expected": ["2026-10-16", "2026-10-20", "2026-10-23", "2026-10-27", "2026-10-30", "2026-11-03", "2026-11-06", "2026-11-10", "2026-11-13"]
+  },
+  {
+    "name": "tue+fri every second week counts from the anchor week",
+    "pattern": { "kind": "WEEKLY", "weekdays": ["FRI", "TUE"], "everyNWeeks": 2 },
+    "anchor": "2026-10-14", "from": "2026-10-14", "to": "2026-11-14",
+    "expected": ["2026-10-16", "2026-10-27", "2026-10-30", "2026-11-10", "2026-11-13"]
+  },
+  {
+    "name": "weekly never yields a date before the anchor even when from is earlier",
+    "pattern": { "kind": "WEEKLY", "weekdays": ["MON"], "everyNWeeks": 1 },
+    "anchor": "2026-10-14", "from": "2026-10-01", "to": "2026-10-27",
+    "expected": ["2026-10-19", "2026-10-26"]
+  },
+  {
+    "name": "monthly day 31 clamps to month end",
+    "pattern": { "kind": "MONTHLY", "dayOfMonth": 31 },
+    "anchor": "2026-01-15", "from": "2026-01-15", "to": "2026-05-01",
+    "expected": ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
+  },
+  {
+    "name": "monthly day 1 skips the current month when already past",
+    "pattern": { "kind": "MONTHLY", "dayOfMonth": 1 },
+    "anchor": "2026-10-14", "from": "2026-10-14", "to": "2026-12-14",
+    "expected": ["2026-11-01", "2026-12-01"]
+  },
+  {
+    "name": "yearly 29 feb falls back to 28 feb outside leap years",
+    "pattern": { "kind": "YEARLY", "month": 2, "day": 29 },
+    "anchor": "2027-01-01", "from": "2027-01-01", "to": "2029-01-01",
+    "expected": ["2027-02-28", "2028-02-29"]
+  },
+  {
+    "name": "yearly on a fixed date, from after this year's date",
+    "pattern": { "kind": "YEARLY", "month": 2, "day": 14 },
+    "anchor": "2026-10-14", "from": "2026-10-14", "to": "2028-03-01",
+    "expected": ["2027-02-14", "2028-02-14"]
+  },
+  {
+    "name": "empty range yields nothing",
+    "pattern": { "kind": "WEEKLY", "weekdays": ["TUE"], "everyNWeeks": 1 },
+    "anchor": "2026-10-14", "from": "2026-10-20", "to": "2026-10-20",
+    "expected": []
+  }
+]

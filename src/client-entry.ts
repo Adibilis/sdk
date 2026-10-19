@@ -34,3 +34,4 @@ export type {
     SubscriptionStatus,
     Weekday,
 } from './subscription/types.js';
+export { isWellFormedPattern, nextOccurrence, occurrences, validateScheduleChoice } from './subscription/schedule.js';
