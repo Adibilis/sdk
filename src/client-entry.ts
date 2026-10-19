@@ -35,3 +35,5 @@ export type {
     Weekday,
 } from './subscription/types.js';
 export { isWellFormedPattern, nextOccurrence, occurrences, validateScheduleChoice } from './subscription/schedule.js';
+export { firstDeliveryDate, START_DATE_HORIZON_DAYS, todayIn, validFirstDeliveryDates } from './subscription/delivery-dates.js';
+export type { DeliveryTerms } from './subscription/delivery-dates.js';
