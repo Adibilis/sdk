@@ -44,3 +44,14 @@ export type {
     SubscriptionPlanPrice,
 } from './subscription/types.js';
 export { fetchSubscriptionPlan, fetchSubscriptionPlans } from './subscription/plan-client.js';
+export {
+    getSubscriptionStatus,
+    previewSubscriptionCheckout,
+    SHOP_CLIENT_IP_HEADER,
+    startSubscriptionCheckout,
+} from './subscription/checkout-client.js';
+export type {
+    ShopCallOptions,
+    SubscriptionCheckoutRequest,
+    SubscriptionCheckoutStartRequest,
+} from './subscription/checkout-client.js';
