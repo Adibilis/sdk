@@ -449,7 +449,9 @@ Open the SetupIntent when the customer clicks "Change card", not on page load.
 - **Configuration:** `configurationObjectOf(subscription.configuration)` gives back the object your
   checkout sent. A change sends the object again with its `configurationText`; on a dynamic
   subscription also the new `unitAmount` (`Number(dynamicUnitAmount(lines))`), which core prorates
-  at the same billing interval.
+  at the same billing interval. Core cannot know your prices and charges what your server sends:
+  build `lines` on the server from your own price list and the stored configuration, never from a
+  price, fee or amount the browser posted.
 - **Ids are core's.** Another customer's subscription or delivery answers 404, exactly like a
   missing one; responses never carry a contact id.
 
