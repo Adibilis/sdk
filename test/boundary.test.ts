@@ -70,4 +70,25 @@ describe('entry point boundary', () => {
         expect(rel(reachableFrom(resolve(DIST, 'client-entry.js')))).not.toContain('property/property-client.js');
         expect(rel(reachableFrom(resolve(DIST, 'server.js')))).toContain('property/property-client.js');
     });
+
+    /**
+     * The subscription clients carry the key and the buyer's whole checkout, while the schedule helpers next to them are meant
+     * for the browser — the cadence chooser and the price line run client-side. Same folder, two sides; this pins the split.
+     */
+    it('the browser entry reaches the subscription helpers but none of the subscription clients', () => {
+        const browser = rel(reachableFrom(resolve(DIST, 'client-entry.js')));
+        const server = rel(reachableFrom(resolve(DIST, 'server.js')));
+        for (const file of [
+            'subscription/plan-client.js',
+            'subscription/checkout-client.js',
+            'subscription/checkout-ref.js',
+            'subscription/checkout-refusal.js',
+        ]) {
+            expect(browser, file).not.toContain(file);
+            expect(server, file).toContain(file);
+        }
+        expect(browser).toContain('subscription/schedule.js');
+        expect(browser).not.toContain('subscription/wire.js');
+        expect(server).toContain('subscription/wire.js');
+    });
 });

@@ -1,0 +1,16 @@
+[
+  { "name": "weekly Tue+Fri", "unitAmount": "25.00", "pattern": { "kind": "WEEKLY", "weekdays": ["TUE", "FRI"], "everyNWeeks": 1 },
+    "interval": "WEEK", "intervalCount": 1, "periodAmount": "50.00" },
+  { "name": "every second Monday", "unitAmount": "39.90", "pattern": { "kind": "WEEKLY", "weekdays": ["MON"], "everyNWeeks": 2 },
+    "interval": "WEEK", "intervalCount": 2, "periodAmount": "39.90" },
+  { "name": "a weekday listed twice counts once", "unitAmount": "10.00", "pattern": { "kind": "WEEKLY", "weekdays": ["WED", "WED", "MON"], "everyNWeeks": 1 },
+    "interval": "WEEK", "intervalCount": 1, "periodAmount": "20.00" },
+  { "name": "three days a week, sub-cent unit amount", "unitAmount": "12.345", "pattern": { "kind": "WEEKLY", "weekdays": ["MON", "WED", "FRI"], "everyNWeeks": 1 },
+    "interval": "WEEK", "intervalCount": 1, "periodAmount": "37.05" },
+  { "name": "monthly on the 31st", "unitAmount": "59.00", "pattern": { "kind": "MONTHLY", "dayOfMonth": 31 },
+    "interval": "MONTH", "intervalCount": 1, "periodAmount": "59.00" },
+  { "name": "yearly on Valentine's Day", "unitAmount": "120.00", "pattern": { "kind": "YEARLY", "month": 2, "day": 14 },
+    "interval": "YEAR", "intervalCount": 1, "periodAmount": "120.00" },
+  { "name": "monthly half-cent boundary rounds up", "unitAmount": "0.005", "pattern": { "kind": "MONTHLY", "dayOfMonth": 1 },
+    "interval": "MONTH", "intervalCount": 1, "periodAmount": "0.01" }
+]
