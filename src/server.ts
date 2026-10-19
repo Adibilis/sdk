@@ -33,3 +33,13 @@ export type {
 } from './property/property-client.js';
 export { fetchShopProduct, fetchShopProducts } from './shop/product-client.js';
 export type { ProductPriceResponse, ShopProductImageResponse, ShopProductResponse } from './shop/product-client.js';
+
+export type {
+    DynamicSubscriptionEntry,
+    ShopSubscriptionEntry,
+    ShopSubscriptionPlan,
+    SubscriptionCheckoutPreview,
+    SubscriptionCheckoutStarted,
+    SubscriptionCheckoutStatus,
+    SubscriptionPlanPrice,
+} from './subscription/types.js';

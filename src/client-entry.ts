@@ -17,3 +17,20 @@ export type { HolidayRange } from './shop/holidays-client.js';
 export { priceIn, shopImageUrl, vatNoteOf } from './shop/product-image.js';
 export type { VatNote } from './shop/product-image.js';
 export type { ProductPriceResponse, ShopProductImageResponse, ShopProductResponse } from '@adbls/api-types';
+
+export { confirmMethodOf, isDynamicEntry } from './subscription/types.js';
+export type {
+    BillingInterval,
+    DynamicSubscriptionEntry,
+    ScheduleDefinition,
+    SchedulePattern,
+    ShopSubscriptionEntry,
+    ShopSubscriptionPlan,
+    SubscriptionCheckoutPreview,
+    SubscriptionCheckoutStarted,
+    SubscriptionCheckoutStatus,
+    SubscriptionPlanPrice,
+    SubscriptionSecretKind,
+    SubscriptionStatus,
+    Weekday,
+} from './subscription/types.js';
