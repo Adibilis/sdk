@@ -12,6 +12,8 @@ export interface AdibilisClientConfig {
 export interface AdibilisClient {
     get<T>(path: string, init?: RequestInit): Promise<T>;
     post<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
+    patch<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
+    delete<T>(path: string, init?: RequestInit): Promise<T>;
 }
 
 /**
@@ -55,6 +57,14 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
                 headers: { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string> | undefined) },
                 body: JSON.stringify(body),
             }),
+        patch: (path, body, init) =>
+            request(path, {
+                ...init,
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string> | undefined) },
+                body: JSON.stringify(body),
+            }),
+        delete: (path, init) => request(path, { ...init, method: 'DELETE' }),
     };
 }
 

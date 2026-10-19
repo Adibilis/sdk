@@ -59,6 +59,40 @@ describe('createAdibilisClient', () => {
         expect(JSON.stringify({ message: error.message, body: error.body })).not.toContain('super-secret');
     });
 
+    it('patches json with the right content type and the key', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(ok({ id: 9 }));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        await expect(client.patch('/api/customer/subscription/9/plan', { planId: 4 })).resolves.toEqual({ id: 9 });
+
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toBe('https://core.test/api/customer/subscription/9/plan');
+        expect(init.method).toBe('PATCH');
+        expect(init.body).toBe(JSON.stringify({ planId: 4 }));
+        expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+        expect((init.headers as Record<string, string>)['X-API-Secret-Key']).toBe('k');
+    });
+
+    it('deletes without a body, keeps the call headers and reads an empty answer as null', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        await expect(client.delete('/api/customer/session', { headers: { 'X-Customer-Session': 'tok' } })).resolves.toBeNull();
+
+        const [, init] = fetchMock.mock.calls[0];
+        expect(init.method).toBe('DELETE');
+        expect(init.body).toBeUndefined();
+        expect((init.headers as Record<string, string>)['X-Customer-Session']).toBe('tok');
+        expect((init.headers as Record<string, string>)['X-API-Secret-Key']).toBe('k');
+    });
+
+    it('reads a 202 without a body as null', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        await expect(client.post('/api/customer/login-link', { email: 'jane@example.com' })).resolves.toBeNull();
+    });
+
     it('rejects an empty api key at construction', () => {
         expect(() => createAdibilisClient({ baseUrl: 'https://core.test', apiKey: '' })).toThrow(/apiKey/);
     });
