@@ -85,10 +85,10 @@ describe('exchangeLoginToken', () => {
         expect(signIn.customer).toEqual(session.customer);
         expect(signIn.expiresAt).toBe(session.expiresAt);
         expect(signIn.cookie).toEqual({
-            name: 'adbl_customer',
+            name: '__Host-adbl_customer',
             value: session.sessionToken,
             options: { httpOnly: true, secure: true, sameSite: 'lax', path: '/', expires: new Date('2026-11-18T09:30:00Z') },
-            header: `adbl_customer=${session.sessionToken}; Path=/; Expires=Wed, 18 Nov 2026 09:30:00 GMT; HttpOnly; Secure; SameSite=Lax`,
+            header: `__Host-adbl_customer=${session.sessionToken}; Path=/; Expires=Wed, 18 Nov 2026 09:30:00 GMT; HttpOnly; Secure; SameSite=Lax`,
         });
     });
 
@@ -134,10 +134,25 @@ describe('exchangeLoginToken', () => {
 describe('expiredCustomerSessionCookie', () => {
     it('clears the session cookie with the same attributes', () => {
         expect(expiredCustomerSessionCookie()).toEqual({
-            name: 'adbl_customer',
+            name: '__Host-adbl_customer',
             value: '',
             options: { httpOnly: true, secure: true, sameSite: 'lax', path: '/', expires: new Date(0) },
-            header: 'adbl_customer=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax',
+            header: '__Host-adbl_customer=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax',
         });
+    });
+});
+
+describe('the __Host- cookie prefix requirements', () => {
+    it('sets and clears the cookie with Secure and Path=/ and no Domain', async () => {
+        const client = mockClient();
+        client.post.mockResolvedValue(session);
+        const { cookie } = await exchangeLoginToken(client, 'mailed-token', visitor);
+
+        for (const header of [cookie.header, expiredCustomerSessionCookie().header]) {
+            expect(header.startsWith('__Host-adbl_customer=')).toBe(true);
+            expect(header).not.toMatch(/Domain=/i);
+            expect(header).toContain('; Path=/;');
+            expect(header).toContain('; Secure');
+        }
     });
 });

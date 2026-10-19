@@ -6,7 +6,7 @@ import type { CorrespondenceLanguage, CustomerSessionResponse } from '../subscri
 import type { CustomerProfile } from './types.js';
 
 /** The cookie that carries the customer's portal session; `customerFromCookies` reads it. */
-export const CUSTOMER_SESSION_COOKIE = 'adbl_customer';
+export const CUSTOMER_SESSION_COOKIE = '__Host-adbl_customer';
 /** Core refuses a longer session token without a lookup. */
 export const MAX_SESSION_TOKEN_LENGTH = 128;
 

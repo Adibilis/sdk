@@ -11,7 +11,7 @@ const PATH = '/api/customer/subscription/9/payment-method';
 const mockClient = () => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() });
 const signedIn = () => {
     const client = mockClient();
-    return { client, customer: customerFromCookies(client, `adbl_customer=${TOKEN}`, { clientIp: '203.0.113.7' }) as CustomerClient };
+    return { client, customer: customerFromCookies(client, `__Host-adbl_customer=${TOKEN}`, { clientIp: '203.0.113.7' }) as CustomerClient };
 };
 
 describe('beginPaymentMethodUpdate', () => {

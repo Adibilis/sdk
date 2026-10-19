@@ -18,7 +18,7 @@ const person: CustomerDeliveryPerson = {
 const mockClient = () => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() });
 const signedIn = () => {
     const client = mockClient();
-    return { client, customer: customerFromCookies(client, `adbl_customer=${TOKEN}`, { clientIp: '203.0.113.7' }) as CustomerClient };
+    return { client, customer: customerFromCookies(client, `__Host-adbl_customer=${TOKEN}`, { clientIp: '203.0.113.7' }) as CustomerClient };
 };
 const refusal = (status: number, code: string, params: string[] = []) =>
     new AdibilisApiError(status, { error: 'x', errorList: { [code]: params }, url: BASE }, BASE);

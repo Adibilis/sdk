@@ -332,12 +332,15 @@ would find the link used. Two shapes are allowed, and only these:
 
 - `GET /account/callback?token=…` renders a "Sign in" button that POSTs the token (shape 1; its POST
   handler must be same-origin only, see below); or
-- (shape 2) the template's flow: the GET callback route does **not** call core. It stores the token in a short
-  `httpOnly` cookie (a few minutes, `Path` limited to the continue page and the exchange handler,
-  `SameSite=Lax`, `Secure`) and redirects to a continue page, so the token leaves the address bar
-  and the browser history at once. The continue page renders the "Sign in" button; its POST reads
-  the token from that cookie, calls `exchangeLoginToken`, deletes the cookie, sets `adbl_customer`
-  and redirects.
+- (shape 2) the template's flow: the GET callback route does **not** call core. It stores the token in a
+  short `httpOnly` cookie, `adbl_login` (900 s, `Secure`, `SameSite=Strict`, `Path=/api/account/session`),
+  and answers 303 to a continue page with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`,
+  so the token leaves the address bar and the browser history at once. The continue page renders the
+  "Sign in" button, a plain `POST` form to `/api/account/session`; that handler reads the token from
+  the cookie, calls `exchangeLoginToken`, deletes the cookie, sets `__Host-adbl_customer` and redirects.
+  `Strict` works because the cookie is needed only on that same-site form POST; the cross-site
+  navigation from the mail client does not need it. The handoff cookie keeps its name: it is not
+  `__Host-`, because its `Path` is not `/`.
 
 **Shape 1's POST must accept only same-origin requests.** The POST carries the token in its body, so
 anyone can build a page that submits *their own* valid token to your handler from the victim's
@@ -357,7 +360,7 @@ export async function POST(request: Request) {
 
 Shape 2 is immune: the token is not in the request body at all but in the parked cookie, which the
 browser sends only with same-site requests (`SameSite=Lax` with a POST from another site is not
-sent), so a forged cross-site POST finds no token. Keep that cookie's `SameSite` at `Lax` or `Strict`.
+sent), so a forged cross-site POST finds no token. Keep that cookie's `SameSite` at `Strict` (`Lax` also works).
 
 Either way the exchange is a POST, the button is a real click (never an auto-submitting form, never
 a script), and the GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
@@ -365,12 +368,16 @@ Redirecting before the button is fine: a redirect does not spend the link, a cal
 link works once, for 15 minutes; a newer link replaces it.
 
 **The session stays on the server.** `exchangeLoginToken` hands the session over only as `cookie`:
-`adbl_customer`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/` (your `/api/account/*` handlers
+`__Host-adbl_customer`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` (your `/api/account/*` handlers
 need it too), expiring with the session 30 days after sign-in — use does not extend it. Set it and
 redirect. Never put the cookie's value, a `CustomerSignIn` or a `CustomerClient` into a page's
 props, a JSON answer or a server action's return value. The `CustomerClient` keeps the token in a
-private field, so it serialises to `{}`. Most browsers accept a `Secure` cookie from
-`http://localhost`; if yours drops it, develop over https.
+private field, so it serialises to `{}`. The `__Host-` prefix requires `Secure`,
+`Path=/` and no `Domain`, or the browser drops the cookie silently; the SDK's header meets all three.
+Because of the prefix the shop must be served over HTTPS; browsers treat `http://localhost` as secure,
+so local development still works. A shop on a sibling subdomain cannot set or overwrite this cookie,
+which is the reason for the prefix. Nobody is signed in under the old name `adbl_customer`: the SDK is
+not released yet.
 
 **Changing the card.** `beginPaymentMethodUpdate(id)` → hand `clientSecret` and `publishableKey` to
 the browser → Payment Element → `stripe.confirmSetup({ elements, redirect: 'if_required', confirmParams: { return_url } })`

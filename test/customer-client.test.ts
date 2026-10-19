@@ -11,23 +11,24 @@ const callHeaders = { headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-
 const page = { content: [], number: 0, size: 20, totalPages: 0, totalElements: 0 };
 
 const mockClient = () => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() });
-const signedIn = (client = mockClient()) => ({ client, customer: customerFromCookies(client, `theme=dark; adbl_customer=${TOKEN}`, visitor)! });
+const signedIn = (client = mockClient()) => ({ client, customer: customerFromCookies(client, `theme=dark; __Host-adbl_customer=${TOKEN}`, visitor)! });
 
 describe('customerFromCookies', () => {
     it('reads the session from a cookie store such as Next’s cookies()', () => {
-        const store = { get: (name: string) => (name === 'adbl_customer' ? { name, value: TOKEN } : undefined) };
+        const store = { get: (name: string) => (name === '__Host-adbl_customer' ? { name, value: TOKEN } : undefined) };
         expect(customerFromCookies(mockClient(), store, visitor)).not.toBeNull();
     });
 
     it('reads the session from a raw Cookie header', () => {
-        expect(customerFromCookies(mockClient(), `a=1; adbl_customer=${TOKEN}; b=2`, visitor)).not.toBeNull();
+        expect(customerFromCookies(mockClient(), `a=1; __Host-adbl_customer=${TOKEN}; b=2`, visitor)).not.toBeNull();
     });
 
     it.each([
         ['no cookie', ''],
-        ['an emptied cookie', 'adbl_customer=; theme=dark'],
-        ['a cookie over 128 characters', `adbl_customer=${'x'.repeat(129)}`],
-        ['a similar name', `xadbl_customer=${TOKEN}`],
+        ['an emptied cookie', '__Host-adbl_customer=; theme=dark'],
+        ['a cookie over 128 characters', `__Host-adbl_customer=${'x'.repeat(129)}`],
+        ['a similar name', `x__Host-adbl_customer=${TOKEN}`],
+        ['the unprefixed name', `adbl_customer=${TOKEN}`],
         ['nothing at all', null],
     ])('is null with %s, and makes no request', (_name, cookies) => {
         const client = mockClient();
@@ -46,7 +47,7 @@ describe('customerFromCookies', () => {
     it('takes the last of two cookies of that name in a raw header, as Next’s cookie store does', async () => {
         const client = mockClient();
         client.get.mockResolvedValue({});
-        const customer = customerFromCookies(client, `adbl_customer=first; adbl_customer=${TOKEN}`, visitor)!;
+        const customer = customerFromCookies(client, `__Host-adbl_customer=first; __Host-adbl_customer=${TOKEN}`, visitor)!;
 
         await customer.getSubscription(1);
 
@@ -114,7 +115,7 @@ describe('reads', () => {
 
     it('refuses a visitor address core would ignore before any request', async () => {
         const client = mockClient();
-        const customer = customerFromCookies(client, `adbl_customer=${TOKEN}`, { clientIp: 'shop.example' })!;
+        const customer = customerFromCookies(client, `__Host-adbl_customer=${TOKEN}`, { clientIp: 'shop.example' })!;
 
         await expect(customer.listSubscriptions()).rejects.toBeInstanceOf(ZodError);
         expect(client.get).not.toHaveBeenCalled();
@@ -127,7 +128,7 @@ describe('reads', () => {
                 headers: { 'content-type': 'application/json' },
             })
         );
-        const customer = customerFromCookies(createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock }), `adbl_customer=${TOKEN}`, visitor)!;
+        const customer = customerFromCookies(createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock }), `__Host-adbl_customer=${TOKEN}`, visitor)!;
 
         const error = await customer.getSubscription(77).catch((e: unknown) => e);
 
@@ -142,7 +143,7 @@ describe('reads', () => {
 
     it('never lets a cache answer for the customer', async () => {
         const fetchMock = vi.fn().mockImplementation(async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }));
-        const customer = customerFromCookies(createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock }), `adbl_customer=${TOKEN}`, visitor)!;
+        const customer = customerFromCookies(createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock }), `__Host-adbl_customer=${TOKEN}`, visitor)!;
 
         await customer.getSubscription(77);
         await customer.cancel(77, { atPeriodEnd: true });
