@@ -169,7 +169,7 @@ export interface CustomerPaymentMethodUpdate {
      * `DECLINED`: the overdue charge failed; the new card stays on file and `hostedInvoiceUrl` lets the customer pay there.
      */
     retry: CustomerPaymentRetry;
-    /** Present only when Stripe has an invoice page to offer: `null` for `DECLINED` and `UNCONFIRMED` without one — then show no link. */
+    /** Present only when Stripe has an invoice page to offer: always `null` for `NOT_NEEDED`, `PAID` and `PROCESSING`, and `null` for `DECLINED` and `UNCONFIRMED` without one — then show no link. */
     hostedInvoiceUrl: string | null;
 }
 

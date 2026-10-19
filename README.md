@@ -345,22 +345,23 @@ would find the link used. Two shapes are allowed, and only these:
 **Shape 1's POST must accept only same-origin requests.** The POST carries the token in its body, so
 anyone can build a page that submits *their own* valid token to your handler from the victim's
 browser; the victim is then signed in as the attacker (login CSRF) and may enter their card or
-address into the attacker's account. Refuse the request unless `Origin` equals your shop's origin,
-or `Sec-Fetch-Site` is `same-origin`:
+address into the attacker's account. Refuse the request unless `Origin` equals your shop's origin
+or `Sec-Fetch-Site` is `same-origin` (either is enough: under the `no-referrer` policy below a form
+POST sends `Origin: null`, and `Sec-Fetch-Site` then carries the proof):
 
 ```typescript
 const SHOP_ORIGIN = 'https://shop.example';
 export async function POST(request: Request) {
-    const origin = request.headers.get('origin');
-    const sameOrigin = origin !== null ? origin === SHOP_ORIGIN : request.headers.get('sec-fetch-site') === 'same-origin';
+    const sameOrigin = request.headers.get('origin') === SHOP_ORIGIN || request.headers.get('sec-fetch-site') === 'same-origin';
     if (!sameOrigin) return new Response('Forbidden', { status: 403 });
     // …then exchangeLoginToken(core, token, visitor)
 }
 ```
 
-Shape 2 is immune: the token is not in the request body at all but in the parked cookie, which the
-browser sends only with same-site requests (`SameSite=Lax` with a POST from another site is not
-sent), so a forged cross-site POST finds no token. Keep that cookie's `SameSite` at `Strict` (`Lax` also works).
+Shape 2 is immune to a forged cross-site POST: the token is not in the request body at all but in the
+parked cookie, which the browser does not send with a cross-site POST, so such a POST finds no token.
+Keep that cookie's `SameSite` at `Strict` (`Lax` also works). A lure to the callback link is not
+stopped by either shape: it still needs the victim's own click on the button, in both shapes.
 
 Either way the exchange is a POST, the button is a real click (never an auto-submitting form, never
 a script), and the GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
@@ -374,8 +375,8 @@ redirect. Never put the cookie's value, a `CustomerSignIn` or a `CustomerClient`
 props, a JSON answer or a server action's return value. The `CustomerClient` keeps the token in a
 private field, so it serialises to `{}`. The `__Host-` prefix requires `Secure`,
 `Path=/` and no `Domain`, or the browser drops the cookie silently; the SDK's header meets all three.
-Because of the prefix the shop must be served over HTTPS; browsers treat `http://localhost` as secure,
-so local development still works. A shop on a sibling subdomain cannot set or overwrite this cookie,
+Because of the prefix the shop must be served over HTTPS; most browsers treat `http://localhost` as
+secure, but Safari may drop `Secure` cookies there; if the cookie is dropped, develop over https. A shop on a sibling subdomain cannot set or overwrite this cookie,
 which is the reason for the prefix. Nobody is signed in under the old name `adbl_customer`: the SDK is
 not released yet.
 
@@ -393,8 +394,8 @@ became of an overdue charge, and there are five outcomes:
 | `DECLINED` | the new card was refused for the overdue invoice | the failure, and `hostedInvoiceUrl` (when present) to pay or authenticate on Stripe's page |
 | `UNCONFIRMED` | another Stripe error: the outcome is unknown | neither success nor failure; `hostedInvoiceUrl` (when present) to check or pay, and read the subscription again |
 
-`hostedInvoiceUrl` is present only when Stripe has an invoice page: it is `null` for `NOT_NEEDED`
-and can be `null` for `DECLINED` and `UNCONFIRMED`. Render the link only when it is set.
+`hostedInvoiceUrl` is present only when Stripe has an invoice page: it is always `null` for
+`NOT_NEEDED`, `PAID` and `PROCESSING`, and can be `null` for `DECLINED` and `UNCONFIRMED`. Render the link only when it is set.
 
 `PAYMENT_PROVIDER_ERROR` from `confirmPaymentMethod` (400) does not guarantee the card is unchanged:
 Stripe may have applied part of the change before it failed. Read the subscription again and show
@@ -440,9 +441,10 @@ Open the SetupIntent when the customer clicks "Change card", not on page load.
   sends them one after another in that order, after checking every part, and when core refuses one
   rejects with a `SubscriptionUpdateError`: `applied` lists what is already in effect, `detail` is
   the subscription after it, `customerRefusalOf` reads its cause. `failed` names the part that
-  stopped, and `outcome` says what is known about it: `'refused'` when core answered 400, 404 or 409
-  with a code of its own (the part is not in effect), `'unknown'` for everything else —
-  `CONCURRENT_UPDATE_CONFLICT`, any 5xx or proxy answer (a 504), a network error or timeout. On
+  stopped, and `outcome` says what is known about it: `'refused'` when core answered 400, 404 or 409,
+  except `CONCURRENT_UPDATE_CONFLICT` and `PAYMENT_PROVIDER_ERROR` (the part is not in effect),
+  `'unknown'` for everything else — those two (Stripe may have applied the change), any 5xx or
+  proxy answer (a 504), a network error or timeout. On
   `'unknown'` the part may be in effect: read the subscription again before reporting it as failed.
 - **Configuration:** `configurationObjectOf(subscription.configuration)` gives back the object your
   checkout sent. A change sends the object again with its `configurationText`; on a dynamic
