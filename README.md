@@ -13,9 +13,9 @@ The export map is the architectural boundary of this package, not a convenience:
 
 | Import | Contains | Safe in a browser bundle |
 |---|---|---|
-| `@adbls/sdk` | forms, order model, holidays, product image/price helpers | **yes** |
+| `@adbls/sdk` | forms, order model, holidays, product image/price helpers, schedule and portal helpers | **yes** |
 | `@adbls/sdk/checkout` | the React checkout context | **yes** |
-| `@adbls/sdk/server` | the API client, the checkout, shop catalog and properties calls — **holds the WEBSITE key** | **no — server only** |
+| `@adbls/sdk/server` | the API client, the checkout, shop catalog, subscription, customer portal and properties calls — **holds the WEBSITE key and customer sessions** | **no — server only** |
 
 Plus `@adbls/sdk/checkout` for the React checkout context — a separate subpath so the root entry
 imports cleanly in a project with no React at all.
@@ -259,6 +259,205 @@ date), not all of them; core's 400 stays the last word — and rejects with a `Z
 `describeBilling('WEEK', 2, 'fr')` → "toutes les 2 semaines"; German, French, Italian and English,
 anything else in English. `firstDeliveryDate(entry, schedule, todayIn())` is the first delivery of
 a subscription started now — the `firstDeliveryAt` core will answer.
+
+## Customer portal
+
+Customers manage their subscriptions on the shop's own account pages, signed in by a link core
+mails them: no password, no account to create. The shop's server keeps the session in a cookie and
+calls core for the customer. Needs a core release with the customer session and the portal.
+
+```typescript
+// server side — route handlers and server components only
+import {
+    requestLoginLink, exchangeLoginToken, customerFromCookies, customerRefusalOf, expiredCustomerSessionCookie,
+} from '@adbls/sdk/server';
+// browser-safe — the pickers and forms of the account pages
+import { dynamicUnitAmount, resumeDateRange, scheduleChangeOf, plansForChange, configurationObjectOf, todayIn } from '@adbls/sdk';
+// todayIn() counts in Europe/Zurich; when core sets `app.time-zone`, pass that zone: todayIn('Europe/London')
+
+const visitor = { clientIp: visitorIpOf(request) }; // the visitor's IP literal, as for the checkout
+
+// 1. The sign-in form's POST. Answer "check your inbox" whatever the address: core answers 202 for every one.
+await requestLoginLink(core, {
+    email,
+    returnUrl: 'https://shop.example/account/callback', // core appends ?token=…
+    language: 'de-CH',                                   // the mail in German, French, Italian or English
+    shopName: 'Oh! Blumen',
+}, visitor);
+
+// 2. GET /account/callback?token=… changes nothing in core: it parks the token in a short httpOnly cookie
+//    and redirects to /account/continue, which renders a "Sign in" button that POSTs.
+// 3. That button's POST (the token comes from the parked cookie, which the POST then deletes):
+try {
+    const { cookie } = await exchangeLoginToken(core, token, visitor);
+    response.cookies.set(cookie.name, cookie.value, cookie.options); // or the header `Set-Cookie: ${cookie.header}`
+    // then 303 to /account
+} catch (error) {
+    if (customerRefusalOf(error)?.code !== 'CUSTOMER_LOGIN_TOKEN_INVALID') throw error;
+    // "This link was used or has expired", with the form for a new one
+}
+
+// 4. Every account page and handler (a raw `Cookie` header string works too; with duplicates the last one wins, like Next's store)
+const customer = customerFromCookies(core, await cookies(), visitor);
+if (!customer) return; // no session cookie: redirect to the sign-in page
+const { content } = await customer.listSubscriptions();
+const subscription = await customer.getSubscription(id);
+// 401 CUSTOMER_SESSION_INVALID on any call: clear the cookie and sign in again.
+// A server component cannot clear cookies: redirect to a route handler that sets expiredCustomerSessionCookie() and
+// redirects to the sign-in page, or the next request loops on the same dead cookie.
+
+// 5. A change answers the subscription as it is now: render that, do not read it again
+const delivery = subscription.upcomingDeliveries.find((d) => d.skippable);  // the skip button only where skippable
+if (delivery) await customer.skipDelivery(id, delivery.id);
+const { earliest, latest } = resumeDateRange(todayIn());                     // the pause date picker's bounds
+await customer.pause(id, { resumesAt: earliest });
+if (scheduleChangeOf(subscription, schedule).allowed) await customer.changeSchedule(id, schedule);
+await customer.changeConfiguration(id, { configuration, configurationText, unitAmount: Number(dynamicUnitAmount(lines)) });
+await customer.changeDeliveryPerson(id, deliveryPerson);
+await customer.cancel(id, { atPeriodEnd: true });                            // reactivate(id) takes it back until then
+
+// 6. Logout: end the session in core, and clear the cookie whatever happens
+const cleared = expiredCustomerSessionCookie();
+try {
+    await customer.logout();
+} finally {
+    response.cookies.set(cleared.name, cleared.value, cleared.options);
+}
+```
+
+**The link is spent on a POST behind a real button, never on a GET.** Mail scanners (Outlook Safe
+Links and others) open every link in a mail before the customer does, some with JavaScript running.
+A callback that exchanged the token while rendering would sign the scanner in, and the customer
+would find the link used. Two shapes are allowed, and only these:
+
+- `GET /account/callback?token=…` renders a "Sign in" button that POSTs the token (shape 1; its POST
+  handler must be same-origin only, see below); or
+- (shape 2) the template's flow: the GET callback route does **not** call core. It stores the token in a
+  short `httpOnly` cookie, `adbl_login` (900 s, `Secure`, `SameSite=Strict`, `Path=/api/account/session`),
+  and answers 303 to a continue page with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`,
+  so the token leaves the address bar and the browser history at once. The continue page renders the
+  "Sign in" button, a plain `POST` form to `/api/account/session`; that handler reads the token from
+  the cookie, calls `exchangeLoginToken`, deletes the cookie, sets `__Host-adbl_customer` and redirects.
+  `Strict` works because the cookie is needed only on that same-site form POST; the cross-site
+  navigation from the mail client does not need it. The handoff cookie keeps its name: it is not
+  `__Host-`, because its `Path` is not `/`.
+
+**Shape 1's POST must accept only same-origin requests.** The POST carries the token in its body, so
+anyone can build a page that submits *their own* valid token to your handler from the victim's
+browser; the victim is then signed in as the attacker (login CSRF) and may enter their card or
+address into the attacker's account. Refuse the request unless `Origin` equals your shop's origin
+or `Sec-Fetch-Site` is `same-origin` (either is enough: under the `no-referrer` policy below a form
+POST sends `Origin: null`, and `Sec-Fetch-Site` then carries the proof):
+
+```typescript
+const SHOP_ORIGIN = 'https://shop.example';
+export async function POST(request: Request) {
+    const sameOrigin = request.headers.get('origin') === SHOP_ORIGIN || request.headers.get('sec-fetch-site') === 'same-origin';
+    if (!sameOrigin) return new Response('Forbidden', { status: 403 });
+    // …then exchangeLoginToken(core, token, visitor)
+}
+```
+
+Shape 2 is immune to a forged cross-site POST: the token is not in the request body at all but in the
+parked cookie, which the browser does not send with a cross-site POST, so such a POST finds no token.
+Keep that cookie's `SameSite` at `Strict` (`Lax` also works). A lure to the callback link is not
+stopped by either shape: it still needs the victim's own click on the button, in both shapes.
+
+Either way the exchange is a POST, the button is a real click (never an auto-submitting form, never
+a script), and the GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
+Redirecting before the button is fine: a redirect does not spend the link, a call to core does. A
+link works once, for 15 minutes; a newer link replaces it.
+
+**The session stays on the server.** `exchangeLoginToken` hands the session over only as `cookie`:
+`__Host-adbl_customer`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` (your `/api/account/*` handlers
+need it too), expiring with the session 30 days after sign-in — use does not extend it. Set it and
+redirect. Never put the cookie's value, a `CustomerSignIn` or a `CustomerClient` into a page's
+props, a JSON answer or a server action's return value. The `CustomerClient` keeps the token in a
+private field, so it serialises to `{}`. The `__Host-` prefix requires `Secure`,
+`Path=/` and no `Domain`, or the browser drops the cookie silently; the SDK's header meets all three.
+Because of the prefix the shop must be served over HTTPS; most browsers treat `http://localhost` as
+secure, but Safari may drop `Secure` cookies there; if the cookie is dropped, develop over https. A shop on a sibling subdomain cannot set or overwrite this cookie,
+which is the reason for the prefix. Nobody is signed in under the old name `adbl_customer`: the SDK is
+not released yet.
+
+**Changing the card.** `beginPaymentMethodUpdate(id)` → hand `clientSecret` and `publishableKey` to
+the browser → Payment Element → `stripe.confirmSetup({ elements, redirect: 'if_required', confirmParams: { return_url } })`
+→ post `setupIntent.id` (after a redirect: the `setup_intent` query parameter) to your server →
+`confirmPaymentMethod(id, setupIntentId)`. The new card is saved in every case; `retry` says what
+became of an overdue charge, and there are five outcomes:
+
+| `retry` | Meaning | Show |
+|---|---|---|
+| `NOT_NEEDED` | nothing was overdue | "card updated" |
+| `PAID` | every overdue invoice came back paid; the status turns `ACTIVE` with core's webhook | "card updated, payment received"; read the subscription again in a moment |
+| `PROCESSING` | Stripe took the charge but an invoice is still open (a bank debit in flight) | "payment is being processed"; read the subscription again later |
+| `DECLINED` | the new card was refused for the overdue invoice | the failure, and `hostedInvoiceUrl` (when present) to pay or authenticate on Stripe's page |
+| `UNCONFIRMED` | another Stripe error: the outcome is unknown | neither success nor failure; `hostedInvoiceUrl` (when present) to check or pay, and read the subscription again |
+
+`hostedInvoiceUrl` is present only when Stripe has an invoice page: it is always `null` for
+`NOT_NEEDED`, `PAID` and `PROCESSING`, and can be `null` for `DECLINED` and `UNCONFIRMED`. Render the link only when it is set.
+
+`PAYMENT_PROVIDER_ERROR` from `confirmPaymentMethod` (400) does not guarantee the card is unchanged:
+Stripe may have applied part of the change before it failed. Read the subscription again and show
+the `paymentMethod` it reports, not an assumption.
+
+Open the SetupIntent when the customer clicks "Change card", not on page load.
+
+**What core holds you to:**
+
+- **`clientIp` on every call.** `requestLoginLink`, `exchangeLoginToken` and `customerFromCookies`
+  all take the visitor's address, with the checkout's rule: an IPv4 or IPv6 literal, IPv4-mapped
+  addresses sent as IPv4. Core throttles per visitor with it; a missing or malformed one rejects
+  locally before anything is sent.
+- **Budgets.** Per visitor a minute: 60 reads, 10 changes, 5 card calls, 5 sign-in links, 30
+  sign-ins and logouts together; 10 SetupIntents per customer an hour; 5 sign-in mails per address
+  an hour (further requests still answer 202, nothing is sent). Every change answers the
+  subscription as it is now — render that instead of reading it again.
+- **No retries.** The SDK retries no portal call, not even a 429 or a timeout: a change may have
+  reached core, so repeating it is the shop's decision, made with a fresh read.
+- **The 401 rule.** Only a 401 naming `CUSTOMER_SESSION_INVALID` means "sign in again": clear the
+  cookie and redirect. A 401 without that code is a wrong WEBSITE key, which no sign-in fixes — do
+  not log the customer out for it.
+- **The list shows `startDate`.** `listSubscriptions` rows carry `startDate` for a start-date
+  subscription (`null` otherwise), so a not-yet-started subscription can show when it begins instead
+  of an empty delivery column. The order across pages is stable (ties break by id), so paging does
+  not repeat or skip a row; `listTransactions` refuses `sortBy` and a descending direction.
+- **Check before you send.** `scheduleChangeOf(subscription, schedule)` answers what core will: a
+  rhythm outside `scheduleDefinition` → `SUBSCRIPTION_SCHEDULE_NOT_ALLOWED`; on a dynamic
+  subscription another billing interval (weekly ↔ monthly, every week ↔ every 2 weeks) →
+  `SUBSCRIPTION_BILLING_INTERVAL_CHANGE`; otherwise the new `periodAmount` (more weekdays cost
+  more). `plansForChange(entries, subscription)` lists the plans a plan change can go to.
+  `resumeDateRange(todayIn())` bounds the pause date picker (`todayIn()` defaults to `Europe/Zurich`;
+  pass core's zone when the instance sets `app.time-zone`). Show the skip button only where
+  `delivery.skippable`.
+- **`customerRefusalOf(error)`** reads every refusal; `null` means rethrow.
+  `SUBSCRIPTION_ACTION_NOT_ALLOWED` carries `reason`: `CANCELLING` (cancelled at period end — offer
+  `reactivate`), `PAST_DUE` (offer the card change), `NOT_PAUSED`, `NOT_CANCELLING`, `CANCELLED`,
+  `INCOMPLETE`, `DYNAMIC` (no plan to change). `CONCURRENT_UPDATE_CONFLICT` means Stripe has the
+  change and core is still writing it: read the subscription again in a moment, never repeat the
+  change.
+- **One property per call:** `changePlan`, `changeSchedule`, `changeConfiguration`,
+  `changeDeliveryPerson`. `updateSubscription(id, { planId, schedule, configuration, deliveryPerson })`
+  sends them one after another in that order, after checking every part, and when core refuses one
+  rejects with a `SubscriptionUpdateError`: `applied` lists what is already in effect, `detail` is
+  the subscription after it, `customerRefusalOf` reads its cause. `failed` names the part that
+  stopped, and `outcome` says what is known about it: `'refused'` when core answered 400, 404 or 409,
+  except `CONCURRENT_UPDATE_CONFLICT` and `PAYMENT_PROVIDER_ERROR` (the part is not in effect),
+  `'unknown'` for everything else — those two (Stripe may have applied the change), any 5xx or
+  proxy answer (a 504), a network error or timeout. On
+  `'unknown'` the part may be in effect: read the subscription again before reporting it as failed.
+- **Configuration:** `configurationObjectOf(subscription.configuration)` gives back the object your
+  checkout sent. A change sends the object again with its `configurationText`; on a dynamic
+  subscription also the new `unitAmount` (`Number(dynamicUnitAmount(lines))`), which core prorates
+  at the same billing interval. Core cannot know your prices and charges what your server sends:
+  build `lines` on the server from your own price list and the stored configuration, never from a
+  price, fee or amount the browser posted.
+- **Ids are core's.** Another customer's subscription or delivery answers 404, exactly like a
+  missing one; responses never carry a contact id.
+
+Every call checks its input locally first — the generated schema, positive ids, a well-formed
+schedule, a JSON-object configuration, ISO dates, the SetupIntent's `seti_…` id (never its client
+secret), the visitor's address — and rejects with a `ZodError` before anything is sent.
 
 ## Shop catalog
 
@@ -524,10 +723,11 @@ first version published under this name. A range,
 not a pin, so a new core release reaches SDK users without an SDK release; the SDK only needs a
 release when it wants something new from core.
 
-The subscription functions need a core release with the subscription checkout; an older core
-answers their endpoints with 404. Until `@adbls/api-types` carries those types,
-`src/subscription/wire.ts` holds a verbatim copy of core's generated ones; the release that raises
-the dependency replaces it with re-exports, and nothing that imports from the SDK changes.
+The subscription and customer-portal functions need a core release with the subscription checkout,
+the customer session and the portal; an older core answers their endpoints with 404. Until
+`@adbls/api-types` carries those types, `src/subscription/wire.ts` holds a verbatim copy of core's
+generated ones; the release that raises the dependency replaces it with re-exports, and nothing that
+imports from the SDK changes.
 
 ## Two credentials, never confuse them
 
@@ -557,6 +757,12 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/shop/subscription-plan/{id}` | 404 unless that plan is listed |
 | `POST /api/subscription/checkout` | opens a subscription in core and at Stripe (`startSubscriptionCheckout`), or with `preview: true` only prices it (`previewSubscriptionCheckout`); 429 beyond 10 per visitor (`X-Shop-Client-Ip`) or 300 per shop server a minute |
 | `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `POST /api/customer/login-link` | mails a customer a one-time sign-in link (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
+| `POST /api/customer/session` | exchanges the link's token for a 30-day session (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID`; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
+| `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
+| `GET /api/customer/subscription[/{id}]`, `GET /api/customer/transaction` | the signed-in customer's subscriptions and payments (`X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
+| `POST\|PATCH /api/customer/subscription/{id}/payment-method` | the card change (`beginPaymentMethodUpdate`, `confirmPaymentMethod`); 429 beyond 5 per visitor or 120 per shop server a minute, and beyond 10 SetupIntents per customer an hour |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |
 | `GET /api/property/published` | one page of the properties with a live `OWN_WEBSITE` listing |
 | `GET /api/property/published/{id}` | 404 unless that property is published |
@@ -611,4 +817,7 @@ the service user holds no grants.
 `2026-07-04T23:27:30.828Z`) — the wire format — since core's zod profile switched to
 `dateAsString`. Earlier builds typed them as `Date`, which `JSON.parse` never produces, so the SDK
 used to redeclare date-bearing shapes; it imports the generated ones now. Compare ISO dates as
-strings (they order lexicographically) or parse them yourself.
+strings (they order lexicographically) or parse them yourself. In the customer portal's responses
+`nextBillingAt`, `nextDeliveryAt`, `pausedUntil`, `startDate` and a delivery's `dueDate` are
+date-only (`YYYY-MM-DD`, core's time zone): never `new Date('2026-11-03')`, which is UTC midnight
+and shows the previous day west of Greenwich. The other timestamps are instants.

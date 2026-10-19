@@ -59,3 +59,32 @@ export type {
 export { MAX_CART_REF_LENGTH, subscriptionCheckoutRef } from './subscription/checkout-ref.js';
 export { subscriptionCheckoutRefusalOf } from './subscription/checkout-refusal.js';
 export type { SubscriptionCheckoutRefusal } from './subscription/checkout-refusal.js';
+
+export type {
+    CustomerPage,
+    CustomerPaymentMethodSetup,
+    CustomerPaymentMethodUpdate,
+    CustomerProfile,
+    CustomerSubscription,
+    CustomerSubscriptionDetail,
+    CustomerTransaction,
+} from './customer/types.js';
+export {
+    CUSTOMER_SESSION_COOKIE,
+    exchangeLoginToken,
+    expiredCustomerSessionCookie,
+    MAX_SESSION_TOKEN_LENGTH,
+    requestLoginLink,
+} from './customer/session.js';
+export type { CustomerLoginLinkRequest, CustomerSessionCookie, CustomerSignIn } from './customer/session.js';
+export { customerFromCookies } from './customer/customer-client.js';
+export type { CookieReader, CustomerClient, CustomerPageOptions, CustomerTransactionQuery } from './customer/customer-client.js';
+export { SubscriptionUpdateError } from './customer/customer-client.js';
+export type {
+    CustomerConfigurationChange,
+    CustomerDeliveryPerson,
+    CustomerSubscriptionChangePart,
+    CustomerSubscriptionChanges,
+} from './customer/customer-client.js';
+export { customerRefusalOf } from './customer/refusal.js';
+export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';

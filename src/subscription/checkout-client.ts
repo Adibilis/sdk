@@ -68,11 +68,16 @@ const ShopCallOptionsModel = z.object({
     }),
 });
 
-function initOf(options: ShopCallOptions): { headers: Record<string, string> } {
-    return { headers: { [SHOP_CLIENT_IP_HEADER]: ShopCallOptionsModel.parse(options).clientIp } };
+/** The `X-Shop-Client-Ip` header of a shop call; throws a ZodError for an address core would ignore. */
+export function shopCallHeaders(options: ShopCallOptions): Record<string, string> {
+    return { [SHOP_CLIENT_IP_HEADER]: ShopCallOptionsModel.parse(options).clientIp };
 }
 
-function isJsonObject(text: string): boolean {
+function initOf(options: ShopCallOptions): { headers: Record<string, string> } {
+    return { headers: shopCallHeaders(options) };
+}
+
+export function isJsonObject(text: string): boolean {
     try {
         const value: unknown = JSON.parse(text);
         return value !== null && typeof value === 'object' && !Array.isArray(value);

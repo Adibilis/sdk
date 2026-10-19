@@ -40,3 +40,25 @@ export type { DeliveryTerms } from './subscription/delivery-dates.js';
 export { dynamicPeriodAmount, dynamicUnitAmount } from './subscription/pricing.js';
 export type { DynamicPrice } from './subscription/pricing.js';
 export { describeBilling, describeSchedule } from './subscription/describe.js';
+
+export type {
+    CustomerAddress,
+    CustomerDelivery,
+    CustomerPage,
+    CustomerPaymentMethod,
+    CustomerPaymentMethodSetup,
+    CustomerPaymentMethodUpdate,
+    CustomerPaymentRetry,
+    CustomerPlan,
+    CustomerProfile,
+    CustomerSubscription,
+    CustomerSubscriptionDetail,
+    CustomerTransaction,
+    CustomerTransactionKind,
+    FulfillmentType,
+    SubscriptionDeliverySkipReason,
+    SubscriptionDeliveryStatus,
+} from './customer/types.js';
+export { configurationObjectOf, PAUSE_HORIZON_DAYS, plansForChange, resumeDateRange, scheduleChangeOf } from './customer/rules.js';
+export type { ScheduleChangeCheck } from './customer/rules.js';
+export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';
