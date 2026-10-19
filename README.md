@@ -136,6 +136,112 @@ settled, never before, so the browser's own scroll does not fight it. It does no
 Verified on iOS Safari and Chrome Android, both of which keep `fixed` elements in the layout
 viewport, behind the keyboard — a fixed bottom bar stays out of the way.
 
+## Subscriptions
+
+A subscription is sold through core the way an order is: core owns the plan, the delivery schedule
+and the deliveries, Stripe bills each period **in advance**. The shop lists what core lists, lets
+the buyer choose a delivery rhythm, previews the first charge and starts the checkout on
+"Subscribe". Needs a core release with the subscription checkout.
+
+```typescript
+// server side — route handlers
+import {
+    createAdibilisClient, fetchSubscriptionPlans, previewSubscriptionCheckout, startSubscriptionCheckout,
+    getSubscriptionStatus, subscriptionCheckoutRef, subscriptionCheckoutRefusalOf,
+} from '@adbls/sdk/server';
+// browser-safe helpers — usable in the cadence chooser too
+import { isDynamicEntry, validateScheduleChoice, validFirstDeliveryDates, todayIn, dynamicUnitAmount } from '@adbls/sdk';
+
+const entries = await fetchSubscriptionPlans(core);  // the dynamic entry first (if enabled), then the listed plans
+const entry = entries.find(isDynamicEntry);           // "Subscribe this order": no plan, no price, plan fields null
+
+// The buyer composes `schedule` within entry.scheduleDefinition. Check it the way core will:
+validateScheduleChoice(entry.scheduleDefinition, schedule);        // false → core: 400 SUBSCRIPTION_SCHEDULE_NOT_ALLOWED
+const startDates = validFirstDeliveryDates(entry, schedule, todayIn()); // [] unless the entry offers a start date
+
+const terms = {
+    dynamic: { unitAmount: Number(dynamicUnitAmount(lines)), vatRate: 2.6, priceMode: 'BRUTTO', lineItems: lines },
+    currency: 'CHF',
+    schedule,                                   // a SchedulePattern
+    startDate: chosenStartDate,                 // omit to start now
+    configuration: { colours: ['red'] },        // your own object; core stores it, the portal hands it back
+    configurationText: 'Red bouquet, with card', // what orders, mails and the ERP show
+    billingPerson, deliveryPerson,
+    externalSource: 'flora',
+    returnUrl: 'https://shop.example/subscribe/return',
+};
+const externalRef = await subscriptionCheckoutRef(cart.id, terms); // same cart → same ref; changed cart → new ref
+const visitor = { clientIp: visitorIpOf(request) };                // the buyer's IP literal as your server saw it
+
+const preview = await previewSubscriptionCheckout(core, { ...terms, externalRef }, visitor);
+// preview.amount — the first charge; preview.billingInterval/-Count; preview.firstDeliveryAt; preview.publishableKey
+
+try {
+    const started = await startSubscriptionCheckout(core, { ...terms, externalRef, expectedAmount: preview.amount }, visitor);
+    // to the browser: started.clientSecret, started.secretKind, started.publishableKey
+} catch (error) {
+    const refusal = subscriptionCheckoutRefusalOf(error); // null for anything else: rethrow
+    // SUBSCRIPTION_AMOUNT_CHANGED → preview again, show refusal.amount; SUBSCRIPTION_CHECKOUT_EXPIRED → new cart.id;
+    // SUBSCRIPTION_ALREADY_ACTIVE → it went through: show success; SUBSCRIPTION_START_DATE_INVALID → refusal.earliest
+}
+
+// the return page: core's word, not the browser's
+const { status, firstPaymentStatus } = await getSubscriptionStatus(core, 'flora', externalRef, visitor);
+```
+
+**In the browser.** `secretKind` says which Stripe.js call takes the secret — `confirmMethodOf`
+(from `@adbls/sdk`) maps it: `PAYMENT` → `stripe.confirmPayment` (the first period is charged now),
+`SETUP` → `stripe.confirmSetup` (a start date was chosen; the card is saved and charged on that
+date). Before "Subscribe", mount Elements in deferred mode from the preview: without a start date
+`{ mode: 'subscription', amount: Math.round(preview.amount * 100), currency: preview.currency.toLowerCase() }`,
+with one `{ mode: 'setup', currency: preview.currency.toLowerCase() }`. Core sends the currency
+upper-case (`CHF`); Stripe wants it lower-case.
+
+**What core holds you to:**
+
+- **`expectedAmount` is required** — send `preview.amount`. Core quotes it before it creates
+  anything and refuses a different first charge with 409 `SUBSCRIPTION_AMOUNT_CHANGED`.
+  `dynamicPeriodAmount(unitAmount, schedule)` is the *price* line ("50.00 every week" with
+  `describeBilling`); it is not the charge — a NETTO cart adds VAT and Stripe Tax decides under
+  automatic tax.
+- **The reference follows the cart.** The same `(externalSource, externalRef)` resumes an unpaid
+  checkout (a declined card retried with another), but only with the same terms; other terms are
+  409 `SUBSCRIPTION_CHECKOUT_CHANGED`. `subscriptionCheckoutRef(cartRef, terms)` does this for you:
+  it appends a fingerprint of the terms to your cart reference (at most `MAX_CART_REF_LENGTH`
+  characters). `configuration` counts as the exact string core stores — build the object the same
+  way each time. Stripe drops an unpaid checkout after 23 hours; its reference is then spent (409
+  `SUBSCRIPTION_CHECKOUT_EXPIRED`) and the cart needs a new `cartRef`.
+- **`clientIp` is required** on preview, start and status, and must be an IPv4 or IPv6 literal:
+  core throttles 10 checkouts and 60 status reads per visitor a minute through it, and ignores any
+  other value, which leaves every visitor in the shop's one per-server bucket. An IPv4-mapped
+  address (`::ffff:203.0.113.7`, what a dual-stack Node server reports) is sent as plain IPv4.
+  From `X-Forwarded-For`, pass the one entry your proxy appended, not the list.
+- **A start date is strictly after today** in core's time zone (`Europe/Zurich` unless core sets
+  `app.time-zone`), at least the lead time out, at most 365 days out, and a scheduled day of the
+  pattern; "start now" is no start date. `validFirstDeliveryDates(entry, schedule, todayIn())`
+  lists exactly those dates — pass `todayIn()`, not your server's UTC date.
+- **Dynamic carts:** only `EXTERNAL_PRODUCT` lines without `productId`; core rounds every line's
+  `unitPrice × quantity` half-up to cents, sums, and refuses a `unitAmount` that differs (400
+  `SUBSCRIPTION_DYNAMIC_AMOUNT_MISMATCH`). Send `Number(dynamicUnitAmount(lines))` — it sums the
+  same way, exactly, where float sums drift.
+- **`configuration`** is a JSON object (yours, opaque to core, at most 8192 characters once
+  serialized); `configurationText` is the plain text everyone else reads (at most 500).
+- A 409 `CONCURRENT_UPDATE_CONFLICT` (two requests raced for a lock in core) is retried once after
+  250 ms by `startSubscriptionCheckout`; it is safe because the reference makes the call
+  idempotent.
+- **A trial reads as set up, not paid.** A trialing subscription with a confirmed setup reports
+  `firstPaymentStatus` `SUCCEEDED` and `stripeStatus` `"trialing"` while no money has moved yet, so a
+  return page should say "set up", not "paid".
+
+Each call checks the request locally first — the generated schema plus core's own term rules (one
+of `planId` / `dynamic`, a schedule shaped for its kind, the cart total, an ISO start date) — and
+rejects with a `ZodError` before anything is sent.
+
+**Words for the buyer.** `describeSchedule(schedule, 'de')` → "Jede Woche am Dienstag und Freitag",
+`describeBilling('WEEK', 2, 'fr')` → "toutes les 2 semaines"; German, French, Italian and English,
+anything else in English. `firstDeliveryDate(entry, schedule, todayIn())` is the first delivery of
+a subscription started now — the `firstDeliveryAt` core will answer.
+
 ## Shop catalog
 
 A satellite shop sells what core lists for it. An admin enables satellites once (Settings →
@@ -400,6 +506,11 @@ first version published under this name. A range,
 not a pin, so a new core release reaches SDK users without an SDK release; the SDK only needs a
 release when it wants something new from core.
 
+The subscription functions need a core release with the subscription checkout; an older core
+answers their endpoints with 404. Until `@adbls/api-types` carries those types,
+`src/subscription/wire.ts` holds a verbatim copy of core's generated ones; the release that raises
+the dependency replaces it with re-exports, and nothing that imports from the SDK changes.
+
 ## Two credentials, never confuse them
 
 - **Publishing** — no token at all: GitHub Actions publishes via npm trusted publishing (OIDC).
@@ -424,6 +535,10 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/shop/product/{id}` | 404 unless that product is listed |
 | `POST /api/payment/checkout` | creates the order and its Stripe invoice (`startCheckout`), or with `preview: true` only prices it (`previewCheckout`) |
 | `GET /api/payment/order` | the order's payment state (`getOrderStatus`) |
+| `GET /api/shop/subscription-plan` | the dynamic "Subscribe this order" entry and the listed plans (`fetchSubscriptionPlans`); 403 while satellites are disabled, 404 while the `shop` module is |
+| `GET /api/shop/subscription-plan/{id}` | 404 unless that plan is listed |
+| `POST /api/subscription/checkout` | opens a subscription in core and at Stripe (`startSubscriptionCheckout`), or with `preview: true` only prices it (`previewSubscriptionCheckout`); 429 beyond 10 per visitor (`X-Shop-Client-Ip`) or 300 per shop server a minute |
+| `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |
 | `GET /api/property/published` | one page of the properties with a live `OWN_WEBSITE` listing |
 | `GET /api/property/published/{id}` | 404 unless that property is published |
