@@ -9,12 +9,20 @@ import {
     CustomerConfigurationRequestModel,
     CustomerDeliveryPersonChangeRequestModel,
     CustomerPauseRequestModel,
+    CustomerPaymentMethodRequestModel,
     CustomerPlanChangeRequestModel,
     CustomerScheduleRequestModel,
 } from '../subscription/wire.js';
 import type { CustomerDeliveryPersonRequest, SchedulePattern } from '../subscription/wire.js';
 import { CUSTOMER_SESSION_COOKIE, MAX_SESSION_TOKEN_LENGTH } from './session.js';
-import type { CustomerPage, CustomerSubscription, CustomerSubscriptionDetail, CustomerTransaction } from './types.js';
+import type {
+    CustomerPage,
+    CustomerPaymentMethodSetup,
+    CustomerPaymentMethodUpdate,
+    CustomerSubscription,
+    CustomerSubscriptionDetail,
+    CustomerTransaction,
+} from './types.js';
 
 const SESSION_HEADER = 'X-Customer-Session';
 const SUBSCRIPTION_PATH = '/api/customer/subscription';
@@ -290,6 +298,38 @@ export class CustomerClient {
     async skipDelivery(id: number, deliveryId: number): Promise<CustomerSubscriptionDetail> {
         const init = this.#init();
         return this.#client.post(`${subscriptionPath(id)}/delivery/${IdModel.parse(deliveryId)}/skip`, undefined, init);
+    }
+
+    /**
+     * Opens a card change: a Stripe SetupIntent on the subscription's account for the browser's Payment Element, which confirms
+     * it with `stripe.confirmSetup`. Call it when the customer clicks "Change card", not on page load: 10 per customer an hour,
+     * 5 card calls per visitor a minute (429 `TOO_MANY_REQUESTS` beyond either). 409 `SUBSCRIPTION_PAYMENT_METHOD_UNAVAILABLE`
+     * when the subscription has no card to change.
+     */
+    async beginPaymentMethodUpdate(id: number): Promise<CustomerPaymentMethodSetup> {
+        const init = this.#init();
+        return this.#client.post(`${subscriptionPath(id)}/payment-method`, undefined, init);
+    }
+
+    /**
+     * After `stripe.confirmSetup` succeeded: core re-reads the SetupIntent at Stripe, makes its card the subscription's, and on a
+     * past-due subscription retries the unpaid invoices. `setupIntentId` is the intent's id (`seti_...`), never its client secret.
+     * 400 `SUBSCRIPTION_SETUP_INTENT_INVALID` for an intent that is not confirmed or not this subscription's. Never retried.
+     *
+     * The new card is saved in every case below; `retry` only says what happened to the overdue invoices:
+     * - `NOT_NEEDED`: nothing was overdue. Show "card updated".
+     * - `PAID`: the overdue charge went through. Show "card updated and payment received"; the subscription status follows
+     *   within moments, so refetch it rather than assuming `ACTIVE`.
+     * - `PROCESSING`: Stripe is still settling the charge. Show "payment is being processed" and refetch the subscription later.
+     * - `DECLINED`: the new card was refused for the overdue invoice. Show the failure and offer `hostedInvoiceUrl` so the
+     *   customer can pay on Stripe's page or try another card.
+     * - `UNCONFIRMED`: the card is saved but the charge outcome is unknown. Do not claim success or failure; offer
+     *   `hostedInvoiceUrl` to check or pay, and refetch the subscription.
+     */
+    async confirmPaymentMethod(id: number, setupIntentId: string): Promise<CustomerPaymentMethodUpdate> {
+        const init = this.#init();
+        const path = `${subscriptionPath(id)}/payment-method`;
+        return this.#client.patch(path, CustomerPaymentMethodRequestModel.parse({ setupIntentId }), init);
     }
 
     /** Ends the session in core; answers the same for a session that is gone already. Clear the cookie as well, always. */
