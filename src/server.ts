@@ -79,3 +79,10 @@ export {
 export type { CustomerLoginLinkRequest, CustomerSessionCookie, CustomerSignIn } from './customer/session.js';
 export { customerFromCookies } from './customer/customer-client.js';
 export type { CookieReader, CustomerClient, CustomerPageOptions, CustomerTransactionQuery } from './customer/customer-client.js';
+export { SubscriptionUpdateError } from './customer/customer-client.js';
+export type {
+    CustomerConfigurationChange,
+    CustomerDeliveryPerson,
+    CustomerSubscriptionChangePart,
+    CustomerSubscriptionChanges,
+} from './customer/customer-client.js';

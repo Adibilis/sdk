@@ -1,7 +1,18 @@
 import { z } from 'zod';
 import type { AdibilisClient } from '../client/api-client.js';
-import { shopCallHeaders } from '../subscription/checkout-client.js';
+import { configurationString, isJsonObject, shopCallHeaders } from '../subscription/checkout-client.js';
 import type { ShopCallOptions } from '../subscription/checkout-client.js';
+import { parseDecimal } from '../subscription/decimal.js';
+import { isIsoDate, isWellFormedPattern } from '../subscription/schedule.js';
+import {
+    CustomerCancelRequestModel,
+    CustomerConfigurationRequestModel,
+    CustomerDeliveryPersonChangeRequestModel,
+    CustomerPauseRequestModel,
+    CustomerPlanChangeRequestModel,
+    CustomerScheduleRequestModel,
+} from '../subscription/wire.js';
+import type { CustomerDeliveryPersonRequest, SchedulePattern } from '../subscription/wire.js';
 import { CUSTOMER_SESSION_COOKIE, MAX_SESSION_TOKEN_LENGTH } from './session.js';
 import type { CustomerPage, CustomerSubscription, CustomerSubscriptionDetail, CustomerTransaction } from './types.js';
 
@@ -24,6 +35,52 @@ export interface CustomerPageOptions {
 export interface CustomerTransactionQuery extends CustomerPageOptions {
     /** Only this subscription's paid periods (404 when it is not the customer's). */
     subscriptionId?: number;
+}
+
+/** Who receives the deliveries from now on; matched to an existing contact or created, the billing person is never changed. */
+export type CustomerDeliveryPerson = CustomerDeliveryPersonRequest;
+
+export interface CustomerConfigurationChange {
+    /** Your configuration object (the SDK serializes it) or a JSON-object string; `null` or absent keeps the stored one. */
+    configuration?: Record<string, unknown> | string | null;
+    /** What orders, mails and the ERP show, at most 500 characters; always replaced. */
+    configurationText: string;
+    /**
+     * A dynamic subscription's new price per delivery — `Number(dynamicUnitAmount(lines))` of the changed configuration; core
+     * re-prices the period at the same interval and prorates the difference. Ignored on a plan-based subscription.
+     */
+    unitAmount?: number | null;
+}
+
+export interface CustomerSubscriptionChanges {
+    planId?: number;
+    schedule?: SchedulePattern;
+    configuration?: CustomerConfigurationChange;
+    deliveryPerson?: CustomerDeliveryPerson;
+}
+
+export type CustomerSubscriptionChangePart = 'plan' | 'schedule' | 'configuration' | 'deliveryPerson';
+
+/**
+ * `updateSubscription` stopped at `failed` because core refused it (`cause`, an `AdibilisApiError` that `customerRefusalOf`
+ * reads). The parts in `applied` are in effect; `detail` is the subscription after the last of them, `null` when none was.
+ */
+export class SubscriptionUpdateError extends Error {
+    override readonly name = 'SubscriptionUpdateError';
+
+    constructor(
+        readonly failed: CustomerSubscriptionChangePart,
+        readonly applied: CustomerSubscriptionChangePart[],
+        readonly detail: CustomerSubscriptionDetail | null,
+        override readonly cause: unknown
+    ) {
+        super(`Subscription update stopped at ${failed}${applied.length > 0 ? ` after ${applied.join(', ')}` : ''}`);
+    }
+}
+
+interface PortalRequest {
+    path: string;
+    body: unknown;
 }
 
 const IdModel = z.number().int().positive();
@@ -52,6 +109,44 @@ function cookieValue(header: string, name: string): string | undefined {
         if (separator > 0 && part.slice(0, separator).trim() === name) return part.slice(separator + 1).trim();
     }
     return undefined;
+}
+
+const MIN_UNIT_AMOUNT = 0.01;
+const PlanChangeModel = CustomerPlanChangeRequestModel.extend({ planId: IdModel });
+const ScheduleChangeModel = CustomerScheduleRequestModel.superRefine((request, ctx) => {
+    if (!isWellFormedPattern(request.schedule)) {
+        ctx.addIssue({ code: 'custom', path: ['schedule'], message: 'The schedule carries fields its kind does not allow, or misses one it needs' });
+    }
+});
+const ConfigurationChangeModel = CustomerConfigurationRequestModel.superRefine((request, ctx) => {
+    if (request.configuration != null && request.configuration.trim() !== '' && !isJsonObject(request.configuration)) {
+        ctx.addIssue({ code: 'custom', path: ['configuration'], message: 'configuration must be a JSON object' });
+    }
+    if (request.unitAmount != null && (request.unitAmount < MIN_UNIT_AMOUNT || parseDecimal(request.unitAmount).scale > 2)) {
+        ctx.addIssue({ code: 'custom', path: ['unitAmount'], message: 'unitAmount must be at least 0.01, with at most two decimals' });
+    }
+});
+const PauseModel = CustomerPauseRequestModel.superRefine((request, ctx) => {
+    if (!isIsoDate(request.resumesAt)) {
+        ctx.addIssue({ code: 'custom', path: ['resumesAt'], message: 'resumesAt must be an ISO date (YYYY-MM-DD)' });
+    }
+});
+
+function planChange(id: number, planId: number): PortalRequest {
+    return { path: `${subscriptionPath(id)}/plan`, body: PlanChangeModel.parse({ planId }) };
+}
+
+function scheduleChange(id: number, schedule: SchedulePattern): PortalRequest {
+    return { path: `${subscriptionPath(id)}/schedule`, body: ScheduleChangeModel.parse({ schedule }) };
+}
+
+function configurationChange(id: number, change: CustomerConfigurationChange): PortalRequest {
+    const body = ConfigurationChangeModel.parse({ ...change, configuration: configurationString(change.configuration) });
+    return { path: `${subscriptionPath(id)}/configuration`, body };
+}
+
+function deliveryPersonChange(id: number, deliveryPerson: CustomerDeliveryPerson): PortalRequest {
+    return { path: `${subscriptionPath(id)}/delivery-person`, body: CustomerDeliveryPersonChangeRequestModel.parse({ deliveryPerson }) };
 }
 
 /**
@@ -93,6 +188,108 @@ export class CustomerClient {
     async listTransactions(query: CustomerTransactionQuery = {}): Promise<CustomerPage<CustomerTransaction>> {
         const init = this.#init();
         return this.#client.get(withQuery('/api/customer/transaction', TransactionQueryModel.parse(query)), init);
+    }
+
+    /**
+     * Moves a plan-based subscription to another listed plan of the same billing interval and currency (`plansForChange`); Stripe
+     * prorates the difference onto the next invoice, and a plan with a fixed rhythm brings its own schedule. Answers the
+     * subscription as it is now, like every change below. 404 `SHOP_SUBSCRIPTION_PLAN_NOT_FOUND`, 400
+     * `SUBSCRIPTION_BILLING_INTERVAL_CHANGE` / `SUBSCRIPTION_SCHEDULE_NOT_ALLOWED`, 409 `SUBSCRIPTION_ACTION_NOT_ALLOWED` (`DYNAMIC`).
+     */
+    async changePlan(id: number, planId: number): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        const { path, body } = planChange(id, planId);
+        return this.#client.patch(path, body, init);
+    }
+
+    /**
+     * A new delivery rhythm within `scheduleDefinition`; planned deliveries are re-planned from today, ordered ones stay. On a
+     * dynamic subscription the period price follows the number of weekdays and the billing interval may not change. 400
+     * `SUBSCRIPTION_SCHEDULE_NOT_ALLOWED` / `SUBSCRIPTION_BILLING_INTERVAL_CHANGE` — `scheduleChangeOf` answers both beforehand.
+     */
+    async changeSchedule(id: number, schedule: SchedulePattern): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        const { path, body } = scheduleChange(id, schedule);
+        return this.#client.patch(path, body, init);
+    }
+
+    /** The shop's configuration again, and on a dynamic subscription its new price per delivery. 400 `SUBSCRIPTION_CONFIGURATION_INVALID`. */
+    async changeConfiguration(id: number, change: CustomerConfigurationChange): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        const { path, body } = configurationChange(id, change);
+        return this.#client.patch(path, body, init);
+    }
+
+    /** Who receives the deliveries. A delivered subscription needs an address with a country (400 `SUBSCRIPTION_DELIVERY_ADDRESS_REQUIRED`). */
+    async changeDeliveryPerson(id: number, deliveryPerson: CustomerDeliveryPerson): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        const { path, body } = deliveryPersonChange(id, deliveryPerson);
+        return this.#client.patch(path, body, init);
+    }
+
+    /**
+     * Several changes in one go, sent one after another in core's order — plan, schedule, configuration, delivery person — after
+     * every part was checked locally. Core applies each on its own: when it refuses one, the call rejects with a
+     * `SubscriptionUpdateError` naming what was applied before. Prefer the single `change…` calls where a form changes one thing.
+     */
+    async updateSubscription(id: number, changes: CustomerSubscriptionChanges): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        const requests: [CustomerSubscriptionChangePart, PortalRequest][] = [];
+        if (changes.planId !== undefined) requests.push(['plan', planChange(id, changes.planId)]);
+        if (changes.schedule !== undefined) requests.push(['schedule', scheduleChange(id, changes.schedule)]);
+        if (changes.configuration !== undefined) requests.push(['configuration', configurationChange(id, changes.configuration)]);
+        if (changes.deliveryPerson !== undefined) requests.push(['deliveryPerson', deliveryPersonChange(id, changes.deliveryPerson)]);
+        if (requests.length === 0) throw new RangeError('updateSubscription needs at least one change');
+        const applied: CustomerSubscriptionChangePart[] = [];
+        let detail: CustomerSubscriptionDetail | null = null;
+        for (const [part, { path, body }] of requests) {
+            try {
+                detail = await this.#client.patch<CustomerSubscriptionDetail>(path, body, init);
+            } catch (error) {
+                throw new SubscriptionUpdateError(part, [...applied], detail, error);
+            }
+            applied.push(part);
+        }
+        return detail as CustomerSubscriptionDetail;
+    }
+
+    /**
+     * `atPeriodEnd: true` ends the subscription when the paid period ends (deliveries continue until then; `reactivate` takes it
+     * back); `false` ends it now (planned deliveries are cancelled, ordered ones still arrive).
+     */
+    async cancel(id: number, options: { atPeriodEnd: boolean }): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        const body = CustomerCancelRequestModel.parse({ atPeriodEnd: options.atPeriodEnd });
+        return this.#client.post(`${subscriptionPath(id)}/cancel`, body, init);
+    }
+
+    /** "Keep my subscription": withdraws a cancellation at period end. 409 `SUBSCRIPTION_ACTION_NOT_ALLOWED` (`NOT_CANCELLING`). */
+    async reactivate(id: number): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        return this.#client.post(`${subscriptionPath(id)}/reactivate`, undefined, init);
+    }
+
+    /**
+     * Pauses billing and deliveries until `resumesAt` (`YYYY-MM-DD`, tomorrow to 365 days ahead in core's time zone —
+     * `resumeDateRange(todayIn())`); the deliveries before it are skipped. 400 `SUBSCRIPTION_PAUSE_DATE_INVALID` (with `latest`),
+     * 409 `SUBSCRIPTION_ACTION_NOT_ALLOWED` (`CANCELLING`, `PAST_DUE`).
+     */
+    async pause(id: number, options: { resumesAt: string }): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        const body = PauseModel.parse({ resumesAt: options.resumesAt });
+        return this.#client.post(`${subscriptionPath(id)}/pause`, body, init);
+    }
+
+    /** Ends a pause now; the deliveries the pause skipped come back. 409 `SUBSCRIPTION_ACTION_NOT_ALLOWED` (`NOT_PAUSED`). */
+    async resume(id: number): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        return this.#client.post(`${subscriptionPath(id)}/resume`, undefined, init);
+    }
+
+    /** Skips one upcoming delivery while its `skippable` is true. 409 `SUBSCRIPTION_DELIVERY_NOT_SKIPPABLE`, 404 `SUBSCRIPTION_DELIVERY_NOT_FOUND`. */
+    async skipDelivery(id: number, deliveryId: number): Promise<CustomerSubscriptionDetail> {
+        const init = this.#init();
+        return this.#client.post(`${subscriptionPath(id)}/delivery/${IdModel.parse(deliveryId)}/skip`, undefined, init);
     }
 
     /** Ends the session in core; answers the same for a session that is gone already. Clear the cookie as well, always. */
