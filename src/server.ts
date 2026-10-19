@@ -55,3 +55,7 @@ export type {
     SubscriptionCheckoutRequest,
     SubscriptionCheckoutStartRequest,
 } from './subscription/checkout-client.js';
+
+export { MAX_CART_REF_LENGTH, subscriptionCheckoutRef } from './subscription/checkout-ref.js';
+export { subscriptionCheckoutRefusalOf } from './subscription/checkout-refusal.js';
+export type { SubscriptionCheckoutRefusal } from './subscription/checkout-refusal.js';
