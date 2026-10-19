@@ -59,3 +59,13 @@ export type {
 export { MAX_CART_REF_LENGTH, subscriptionCheckoutRef } from './subscription/checkout-ref.js';
 export { subscriptionCheckoutRefusalOf } from './subscription/checkout-refusal.js';
 export type { SubscriptionCheckoutRefusal } from './subscription/checkout-refusal.js';
+
+export type {
+    CustomerPage,
+    CustomerPaymentMethodSetup,
+    CustomerPaymentMethodUpdate,
+    CustomerProfile,
+    CustomerSubscription,
+    CustomerSubscriptionDetail,
+    CustomerTransaction,
+} from './customer/types.js';
