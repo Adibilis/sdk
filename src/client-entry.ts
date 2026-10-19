@@ -39,3 +39,4 @@ export { firstDeliveryDate, START_DATE_HORIZON_DAYS, todayIn, validFirstDelivery
 export type { DeliveryTerms } from './subscription/delivery-dates.js';
 export { dynamicPeriodAmount, dynamicUnitAmount } from './subscription/pricing.js';
 export type { DynamicPrice } from './subscription/pricing.js';
+export { describeBilling, describeSchedule } from './subscription/describe.js';
