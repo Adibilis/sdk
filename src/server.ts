@@ -86,3 +86,5 @@ export type {
     CustomerSubscriptionChangePart,
     CustomerSubscriptionChanges,
 } from './customer/customer-client.js';
+export { customerRefusalOf } from './customer/refusal.js';
+export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';
