@@ -52,6 +52,26 @@ describe('nextOccurrence', () => {
     });
 });
 
+describe('weekday and kind checks at runtime', () => {
+    const fixedTueFri: ScheduleDefinition = { mode: 'FIXED', pattern: weekly(['TUE', 'FRI'], 1) };
+    const bad = (weekdays: unknown): SchedulePattern => weekly(weekdays as SchedulePattern['weekdays'], 1);
+
+    it.each([
+        ['a null entry', [null]],
+        ['an unknown value', ['TUE', 'XYZ']],
+        ['a lower-case value', ['tue']],
+        ['a duplicate', ['TUE', 'TUE']],
+        ['a duplicate in different case', ['TUE', 'tue']],
+    ])('refuses %s', (_name, weekdays) => {
+        expect(isWellFormedPattern(bad(weekdays))).toBe(false);
+        expect(validateScheduleChoice(fixedTueFri, bad(weekdays))).toBe(false);
+    });
+
+    it('refuses an unknown kind', () => {
+        expect(isWellFormedPattern({ kind: 'DAILY' } as unknown as SchedulePattern)).toBe(false);
+    });
+});
+
 describe('validateScheduleChoice (twin of ScheduleChoiceValidator)', () => {
     it('FIXED accepts only its own pattern, ignoring weekday order', () => {
         const fixed: ScheduleDefinition = { mode: 'FIXED', pattern: weekly(['TUE', 'FRI'], 1) };

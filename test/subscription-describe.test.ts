@@ -25,6 +25,10 @@ describe('describeSchedule', () => {
         expect(describeSchedule(friTue, 'es')).toBe('Every week on Tuesday and Friday');
     });
 
+    it.each(['constructor', 'toString', '__proto__'])('words the inherited object key %s in English', (locale) => {
+        expect(describeSchedule(friTue, locale)).toBe('Every week on Tuesday and Friday');
+    });
+
     it('lists three weekdays the way the language does', () => {
         expect(describeSchedule({ kind: 'WEEKLY', weekdays: ['FRI', 'MON', 'WED'], everyNWeeks: 1 }, 'de')).toBe(
             'Jede Woche am Montag, Mittwoch und Freitag'

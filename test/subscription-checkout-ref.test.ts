@@ -70,6 +70,14 @@ describe('subscriptionCheckoutRefusalOf', () => {
         ['changed terms', listed(409, 'SUBSCRIPTION_CHECKOUT_CHANGED'), { code: 'SUBSCRIPTION_CHECKOUT_CHANGED' }],
         ['an expired checkout', listed(409, 'SUBSCRIPTION_CHECKOUT_EXPIRED'), { code: 'SUBSCRIPTION_CHECKOUT_EXPIRED' }],
         ['an already active subscription', listed(400, 'SUBSCRIPTION_ALREADY_ACTIVE'), { code: 'SUBSCRIPTION_ALREADY_ACTIVE' }],
+        ['the rate limit', listed(429, 'TOO_MANY_REQUESTS'), { code: 'TOO_MANY_REQUESTS' }],
+        ['a plan that is not listed', listed(404, 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND'), { code: 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND' }],
+        ['a disabled dynamic entry', listed(400, 'SUBSCRIPTION_DYNAMIC_DISABLED'), { code: 'SUBSCRIPTION_DYNAMIC_DISABLED' }],
+        [
+            'a start date that is not offered',
+            apiError(400, { violations: [{ field: 'startDate', code: 'SUBSCRIPTION_START_DATE_NOT_ALLOWED', params: {} }] }),
+            { code: 'SUBSCRIPTION_START_DATE_NOT_ALLOWED' },
+        ],
         [
             'the earliest start date',
             apiError(400, { violations: [{ field: 'startDate', code: 'SUBSCRIPTION_START_DATE_INVALID', params: { earliest: '2026-10-21' } }] }),
@@ -84,6 +92,8 @@ describe('subscriptionCheckoutRefusalOf', () => {
         ['an amount change without its amount', listed(409, 'SUBSCRIPTION_AMOUNT_CHANGED')],
         ['an amount change on another status', listed(400, 'SUBSCRIPTION_AMOUNT_CHANGED', ['51.30'])],
         ['another violation', apiError(400, { violations: [{ field: 'schedule', code: 'SUBSCRIPTION_SCHEDULE_NOT_ALLOWED', params: {} }] })],
+        ['a 429 without its code', listed(429, 'SOMETHING_ELSE')],
+        ['a 404 for another code', listed(404, 'NOT_FOUND')],
         ['a text body', apiError(409, 'Conflict')],
         ['a foreign error', new Error('boom')],
         ['nothing', null],

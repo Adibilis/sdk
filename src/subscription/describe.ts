@@ -61,7 +61,7 @@ const PHRASES: Record<Language, Phrases> = {
 /** The phrase table and the Intl locale for a BCP 47 tag; a language other than de/fr/it/en is worded entirely in English. */
 function wording(locale: string): { phrases: Phrases; intlLocale: string } {
     const language = locale.toLowerCase().split('-')[0] ?? '';
-    return language in PHRASES ? { phrases: PHRASES[language as Language], intlLocale: locale } : { phrases: PHRASES.en, intlLocale: 'en' };
+    return Object.hasOwn(PHRASES, language) ? { phrases: PHRASES[language as Language], intlLocale: locale } : { phrases: PHRASES.en, intlLocale: 'en' };
 }
 
 function weekdayName(day: Weekday, locale: string): string {

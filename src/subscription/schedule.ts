@@ -121,6 +121,10 @@ function yearly(month: number, dayOfMonth: number, start: number, end: number): 
     return result;
 }
 
+function validWeekdays(weekdays: readonly (Weekday | null)[]): boolean {
+    return weekdays.every((day) => day != null && WEEKDAYS.includes(day)) && new Set(weekdays).size === weekdays.length;
+}
+
 function inRange(value: number | null | undefined, min: number, max: number): boolean {
     return value == null || (Number.isInteger(value) && value >= min && value <= max);
 }
@@ -135,7 +139,7 @@ export function isWellFormedPattern(pattern: SchedulePattern | null | undefined)
             return (
                 weekdays != null &&
                 weekdays.length > 0 &&
-                new Set(weekdays).size === weekdays.length &&
+                validWeekdays(weekdays) &&
                 everyNWeeks != null &&
                 dayOfMonth == null &&
                 month == null &&
@@ -152,6 +156,8 @@ export function isWellFormedPattern(pattern: SchedulePattern | null | undefined)
                 everyNWeeks == null &&
                 dayOfMonth == null
             );
+        default:
+            return false;
     }
 }
 

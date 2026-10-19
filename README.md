@@ -149,11 +149,12 @@ import {
     createAdibilisClient, fetchSubscriptionPlans, previewSubscriptionCheckout, startSubscriptionCheckout,
     getSubscriptionStatus, subscriptionCheckoutRef, subscriptionCheckoutRefusalOf,
 } from '@adbls/sdk/server';
+import type { SubscriptionCheckoutRequest } from '@adbls/sdk/server';
 // browser-safe helpers — usable in the cadence chooser too
 import { isDynamicEntry, validateScheduleChoice, validFirstDeliveryDates, todayIn, dynamicUnitAmount } from '@adbls/sdk';
 
 const entries = await fetchSubscriptionPlans(core);  // the dynamic entry first (if enabled), then the listed plans
-const entry = entries.find(isDynamicEntry);           // "Subscribe this order": no plan, no price, plan fields null
+const entry = entries.find(isDynamicEntry)!;          // "Subscribe this order": no plan, no price, plan fields null
 
 // The buyer composes `schedule` within entry.scheduleDefinition. Check it the way core will:
 validateScheduleChoice(entry.scheduleDefinition, schedule);        // false → core: 400 SUBSCRIPTION_SCHEDULE_NOT_ALLOWED
@@ -169,10 +170,12 @@ const terms = {
     billingPerson, deliveryPerson,
     externalSource: 'flora',
     returnUrl: 'https://shop.example/subscribe/return',
-};
+} satisfies Omit<SubscriptionCheckoutRequest, 'externalRef'>;
 const externalRef = await subscriptionCheckoutRef(cart.id, terms); // same cart → same ref; changed cart → new ref
 const visitor = { clientIp: visitorIpOf(request) };                // the buyer's IP literal as your server saw it
 
+// A preview is a checkout call: it counts against the visitor's 10 a minute. Preview once, before "Subscribe", and price the live
+// line from dynamicPeriodAmount(...) instead of previewing on every change.
 const preview = await previewSubscriptionCheckout(core, { ...terms, externalRef }, visitor);
 // preview.amount — the first charge; preview.billingInterval/-Count; preview.firstDeliveryAt; preview.publishableKey
 
@@ -181,11 +184,13 @@ try {
     // to the browser: started.clientSecret, started.secretKind, started.publishableKey
 } catch (error) {
     const refusal = subscriptionCheckoutRefusalOf(error); // null for anything else: rethrow
-    // SUBSCRIPTION_AMOUNT_CHANGED → preview again, show refusal.amount; SUBSCRIPTION_CHECKOUT_EXPIRED → new cart.id;
-    // SUBSCRIPTION_ALREADY_ACTIVE → it went through: show success; SUBSCRIPTION_START_DATE_INVALID → refusal.earliest
+    // SUBSCRIPTION_AMOUNT_CHANGED → preview again, show refusal.amount; SUBSCRIPTION_CHECKOUT_EXPIRED and
+    // SUBSCRIPTION_CHECKOUT_CHANGED → start over with a NEW cart.id; SUBSCRIPTION_ALREADY_ACTIVE → it went through: show success;
+    // SUBSCRIPTION_START_DATE_INVALID → refusal.earliest; TOO_MANY_REQUESTS → wait, then try again
 }
 
-// the return page: core's word, not the browser's
+// the return page: core's word, not the browser's. Status reads are limited to 60 a minute per visitor: poll every ~3 s, for at
+// most 2 minutes, and stop on a final status.
 const { status, firstPaymentStatus } = await getSubscriptionStatus(core, 'flora', externalRef, visitor);
 ```
 
@@ -203,14 +208,25 @@ upper-case (`CHF`); Stripe wants it lower-case.
   anything and refuses a different first charge with 409 `SUBSCRIPTION_AMOUNT_CHANGED`.
   `dynamicPeriodAmount(unitAmount, schedule)` is the *price* line ("50.00 every week" with
   `describeBilling`); it is not the charge — a NETTO cart adds VAT and Stripe Tax decides under
-  automatic tax.
+  automatic tax. Use it for the live price line while the buyer changes the cart, and preview once
+  before "Subscribe": previews share the 10-checkouts-a-minute budget of a real start.
 - **The reference follows the cart.** The same `(externalSource, externalRef)` resumes an unpaid
   checkout (a declined card retried with another), but only with the same terms; other terms are
   409 `SUBSCRIPTION_CHECKOUT_CHANGED`. `subscriptionCheckoutRef(cartRef, terms)` does this for you:
   it appends a fingerprint of the terms to your cart reference (at most `MAX_CART_REF_LENGTH`
   characters). `configuration` counts as the exact string core stores — build the object the same
-  way each time. Stripe drops an unpaid checkout after 23 hours; its reference is then spent (409
-  `SUBSCRIPTION_CHECKOUT_EXPIRED`) and the cart needs a new `cartRef`.
+  way each time. With the helper, a 409 `SUBSCRIPTION_CHECKOUT_CHANGED` means the plan itself changed
+  in core: deriving again gives the same reference, so the cart needs a new `cartRef`. Stripe drops
+  an unpaid checkout after 23 hours; its reference is then spent (409 `SUBSCRIPTION_CHECKOUT_EXPIRED`)
+  and the cart needs a new `cartRef` too. Core also cancels a start-date checkout that Stripe returns
+  without anything to confirm, and cancels a row its post-create check finds at another amount than
+  `expectedAmount`: the same reference then gets `SUBSCRIPTION_CHECKOUT_EXPIRED`.
+  `SUBSCRIPTION_ALREADY_ACTIVE` is the opposite: the reference became a subscription, show success.
+- **Refusals a buyer can hit at run time**, all read by `subscriptionCheckoutRefusalOf`: 400
+  `SUBSCRIPTION_DYNAMIC_DISABLED` (core offers no dynamic entry), 404 `SHOP_SUBSCRIPTION_PLAN_NOT_FOUND`
+  (the plan was unlisted or archived since you read the catalog), 400 `SUBSCRIPTION_START_DATE_NOT_ALLOWED`
+  (not one of `validFirstDeliveryDates`) and 429 `TOO_MANY_REQUESTS`. Re-read the catalog for the
+  first two; do not retry the last in a loop.
 - **`clientIp` is required** on preview, start and status, and must be an IPv4 or IPv6 literal:
   core throttles 10 checkouts and 60 status reads per visitor a minute through it, and ignores any
   other value, which leaves every visitor in the shop's one per-server bucket. An IPv4-mapped
@@ -229,13 +245,15 @@ upper-case (`CHF`); Stripe wants it lower-case.
 - A 409 `CONCURRENT_UPDATE_CONFLICT` (two requests raced for a lock in core) is retried once after
   250 ms by `startSubscriptionCheckout`; it is safe because the reference makes the call
   idempotent.
+- **The return page polls.** Status reads are limited to 60 a minute per visitor: read every ~3 s
+  for at most 2 minutes, then tell the buyer you are still confirming and offer a reload.
 - **A trial reads as set up, not paid.** A trialing subscription with a confirmed setup reports
   `firstPaymentStatus` `SUCCEEDED` and `stripeStatus` `"trialing"` while no money has moved yet, so a
   return page should say "set up", not "paid".
 
-Each call checks the request locally first — the generated schema plus core's own term rules (one
-of `planId` / `dynamic`, a schedule shaped for its kind, the cart total, an ISO start date) — and
-rejects with a `ZodError` before anything is sent.
+Each call checks the request locally first — the generated schema plus a subset of core's own term
+rules (one of `planId` / `dynamic`, a schedule shaped for its kind, the cart total, an ISO start
+date), not all of them; core's 400 stays the last word — and rejects with a `ZodError` before anything is sent.
 
 **Words for the buyer.** `describeSchedule(schedule, 'de')` → "Jede Woche am Dienstag und Freitag",
 `describeBilling('WEEK', 2, 'fr')` → "toutes les 2 semaines"; German, French, Italian and English,

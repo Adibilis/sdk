@@ -88,5 +88,7 @@ describe('entry point boundary', () => {
             expect(server, file).toContain(file);
         }
         expect(browser).toContain('subscription/schedule.js');
+        expect(browser).not.toContain('subscription/wire.js');
+        expect(server).toContain('subscription/wire.js');
     });
 });
