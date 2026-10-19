@@ -91,4 +91,19 @@ describe('entry point boundary', () => {
         expect(browser).not.toContain('subscription/wire.js');
         expect(server).toContain('subscription/wire.js');
     });
+
+    /**
+     * The customer clients carry the key AND a customer's session: a session token in a browser bundle is a signed-in customer
+     * anyone can replay. The portal rules next to them run in the browser (the schedule and plan pickers). Same folder, two sides.
+     */
+    it('the browser entry reaches the portal rules but none of the customer clients', () => {
+        const browser = rel(reachableFrom(resolve(DIST, 'client-entry.js')));
+        const server = rel(reachableFrom(resolve(DIST, 'server.js')));
+        for (const file of ['customer/session.js', 'customer/customer-client.js', 'customer/refusal.js']) {
+            expect(browser, file).not.toContain(file);
+            expect(server, file).toContain(file);
+        }
+        expect(browser).toContain('customer/rules.js');
+        expect(browser).not.toContain('subscription/wire.js');
+    });
 });
