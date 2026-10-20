@@ -96,6 +96,27 @@ export function amountChangedOf(error: unknown): number | null {
     return Number.isFinite(amount) ? amount : null;
 }
 
+/** The line core refused because no distributor routed to `country` has stock for it. */
+export interface ProductUnavailable {
+    productId: number;
+    /** Upper-case ISO code, or `null` when the order named no country and core's catch-all decided. */
+    country: string | null;
+}
+
+/**
+ * The refused product when `error` is core's refusal of a checkout or preview line it cannot ship
+ * (409 `SHOP_PRODUCT_NOT_AVAILABLE`), otherwise `null`. Nothing was created; tell the buyer the
+ * product is not available for delivery to that country, remove or mark the line and preview again.
+ */
+export function productUnavailableOf(error: unknown): ProductUnavailable | null {
+    if (!(error instanceof AdibilisApiError) || error.status !== 409) return null;
+    const errorList = (error.body as { errorList?: Record<string, unknown> } | null)?.errorList;
+    const param = errorList?.['SHOP_PRODUCT_NOT_AVAILABLE'];
+    if (!Array.isArray(param) || typeof param[0] !== 'string' || !/^\d+$/.test(param[0])) return null;
+    const country = typeof param[1] === 'string' && param[1] !== '' ? param[1] : null;
+    return { productId: Number(param[0]), country };
+}
+
 /**
  * The order's state as core sees it — `orderStatus` flips to `PAID` when the Stripe webhook has
  * landed, which is the only thing that counts as paid. A success page polls this after the
