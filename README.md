@@ -202,12 +202,15 @@ const { status, firstPaymentStatus } = await getSubscriptionStatus(core, 'flora'
 ```
 
 **In the browser.** `secretKind` says which Stripe.js call takes the secret — `confirmMethodOf`
-(from `@adbls/sdk`) maps it: `PAYMENT` → `stripe.confirmPayment` (the first period is charged now),
-`SETUP` → `stripe.confirmSetup` (a start date was chosen; the card is saved and charged on that
-date). Before "Subscribe", mount Elements in deferred mode from the preview: without a start date
-`{ mode: 'subscription', amount: Math.round(preview.amount * 100), currency: preview.currency.toLowerCase() }`,
-with one `{ mode: 'setup', currency: preview.currency.toLowerCase() }`. Core sends the currency
-upper-case (`CHF`); Stripe wants it lower-case.
+(from `@adbls/sdk`) maps it: `PAYMENT` → `stripe.confirmPayment`. Every checkout charges its first
+cycle now, with a start date too: the deliveries begin on that date, the subscription is active as
+soon as the payment went through, and the next charge follows a lead time before the second cycle's
+first delivery (`preview.nextBillingAt`). `SETUP` → `stripe.confirmSetup` comes back only when a
+start-date checkout that a core release before 1.9.7 opened (card saved, nothing charged) is
+resumed; the portal's card change is the only other SetupIntent. Before "Subscribe", mount Elements
+in deferred mode from the preview, with or without a start date:
+`{ mode: 'subscription', amount: Math.round(preview.amount * 100), currency: preview.currency.toLowerCase() }`.
+Core sends the currency upper-case (`CHF`); Stripe wants it lower-case.
 
 **What core holds you to:**
 
@@ -225,9 +228,8 @@ upper-case (`CHF`); Stripe wants it lower-case.
   way each time. With the helper, a 409 `SUBSCRIPTION_CHECKOUT_CHANGED` means the plan itself changed
   in core: deriving again gives the same reference, so the cart needs a new `cartRef`. Stripe drops
   an unpaid checkout after 23 hours; its reference is then spent (409 `SUBSCRIPTION_CHECKOUT_EXPIRED`)
-  and the cart needs a new `cartRef` too. Core also cancels a start-date checkout that Stripe returns
-  without anything to confirm, and cancels a row its post-create check finds at another amount than
-  `expectedAmount`: the same reference then gets `SUBSCRIPTION_CHECKOUT_EXPIRED`.
+  and the cart needs a new `cartRef` too. Core also cancels a row its post-create check finds at
+  another amount than `expectedAmount`: the same reference then gets `SUBSCRIPTION_CHECKOUT_EXPIRED`.
   `SUBSCRIPTION_ALREADY_ACTIVE` is the opposite: the reference became a subscription, show success.
 - **Refusals a buyer can hit at run time**, all read by `subscriptionCheckoutRefusalOf`: 400
   `SUBSCRIPTION_DYNAMIC_DISABLED` (core offers no dynamic entry), 404 `SHOP_SUBSCRIPTION_PLAN_NOT_FOUND`
@@ -254,9 +256,10 @@ upper-case (`CHF`); Stripe wants it lower-case.
   idempotent.
 - **The return page polls.** Status reads are limited to 60 a minute per visitor: read every ~3 s
   for at most 2 minutes, then tell the buyer you are still confirming and offer a reload.
-- **A trial reads as set up, not paid.** A trialing subscription with a confirmed setup reports
-  `firstPaymentStatus` `SUCCEEDED` and `stripeStatus` `"trialing"` while no money has moved yet, so a
-  return page should say "set up", not "paid".
+- **A start date reads as paid.** A start-date subscription reports `stripeStatus` `"trialing"`
+  until its second charge: Stripe's trial only defers that charge, the first cycle is paid at
+  checkout. Only a start-date checkout opened before core 1.9.7 reports `SUCCEEDED` for a saved card
+  with no money moved; its return page should say "set up", not "paid".
 
 Each call checks the request locally first — the generated schema plus a subset of core's own term
 rules (one of `planId` / `dynamic`, a schedule shaped for its kind, the cart total, an ISO start
@@ -264,7 +267,9 @@ date), not all of them; core's 400 stays the last word — and rejects with a `Z
 
 **Words for the buyer.** `describeSchedule(schedule, 'de')` → "Jede Woche am Dienstag und Freitag",
 `describeBilling('WEEK', 2, 'fr')` → "toutes les 2 semaines"; German, French, Italian and English,
-anything else in English. `firstDeliveryDate(entry, schedule, todayIn())` is the first delivery of
+anything else in English. A `MONTHLY_WEEKDAY` rhythm (`weekOfMonth` 1–4, or -1 for the last, and
+one `weekday`; needs core 1.9.7) reads "Every first Tuesday of the month", "Jeden ersten Dienstag im
+Monat"; it bills like `MONTHLY`, once a month, and each paid month buys one delivery. `firstDeliveryDate(entry, schedule, todayIn())` is the first delivery of
 a subscription started now — the `firstDeliveryAt` core will answer.
 
 ## Customer portal
@@ -293,15 +298,15 @@ await requestLoginLink(core, {
 }, visitor);
 
 // 2. GET /account/callback?token=… changes nothing in core: it parks the token in a short httpOnly cookie
-//    and redirects to /account/continue, which renders a "Sign in" button that POSTs.
-// 3. That button's POST (the token comes from the parked cookie, which the POST then deletes):
+//    and redirects to /account/continue, which POSTs as soon as it loads (no button to click).
+// 3. That POST (the token comes from the parked cookie, which the POST then deletes):
 try {
     const { cookie } = await exchangeLoginToken(core, token, visitor);
     response.cookies.set(cookie.name, cookie.value, cookie.options); // or the header `Set-Cookie: ${cookie.header}`
     // then 303 to /account
 } catch (error) {
     if (customerRefusalOf(error)?.code !== 'CUSTOMER_LOGIN_TOKEN_INVALID') throw error;
-    // "This link was used or has expired", with the form for a new one
+    // "This link has expired", with the form for a new one
 }
 
 // 4. Every account page and handler (a raw `Cookie` header string works too; with duplicates the last one wins, like Next's store)
@@ -332,19 +337,22 @@ try {
 }
 ```
 
-**The link is spent on a POST behind a real button, never on a GET.** Mail scanners (Outlook Safe
-Links and others) open every link in a mail before the customer does, some with JavaScript running.
-A callback that exchanged the token while rendering would sign the scanner in, and the customer
-would find the link used. Two shapes are allowed, and only these:
+**The link signs in by itself, through a POST, never from the GET of the link.** Core accepts a link
+every time it is used until it expires, each time with a new session. Mail scanners (Outlook Safe
+Links and others) open every link in a mail before the customer does, some with JavaScript running;
+such a scanner signs itself in, in its own cookie jar, and the link still works for the customer. So
+the page the link leads to exchanges the token as soon as it loads, without a button to click. Two
+shapes are allowed, and only these:
 
-- `GET /account/callback?token=…` renders a "Sign in" button that POSTs the token (shape 1; its POST
-  handler must be same-origin only, see below); or
+- `GET /account/callback?token=…` renders a page that POSTs the token as soon as it loads (shape 1;
+  its POST handler must be same-origin only, see below); or
 - (shape 2) the template's flow: the GET callback route does **not** call core. It stores the token in a
   short `httpOnly` cookie, `adbl_login` (900 s, `Secure`, `SameSite=Strict`, `Path=/api/account/session`),
-  and answers 303 to a continue page with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`,
-  so the token leaves the address bar and the browser history at once. The continue page renders the
-  "Sign in" button, a plain `POST` form to `/api/account/session`; that handler reads the token from
-  the cookie, calls `exchangeLoginToken`, deletes the cookie, sets `__Host-adbl_customer` and redirects.
+  and answers 303 to `/account/continue` with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`,
+  so the token leaves the address bar and the browser history at once. The continue page POSTs to
+  `/api/account/session` as soon as it loads; that handler reads the token from the cookie, calls
+  `exchangeLoginToken`, deletes the cookie, sets `__Host-adbl_customer` and the page goes on to the
+  account.
   `Strict` works because the cookie is needed only on that same-site form POST; the cross-site
   navigation from the mail client does not need it. The handoff cookie keeps its name: it is not
   `__Host-`, because its `Path` is not `/`.
@@ -367,13 +375,15 @@ export async function POST(request: Request) {
 
 Shape 2 is immune to a forged cross-site POST: the token is not in the request body at all but in the
 parked cookie, which the browser does not send with a cross-site POST, so such a POST finds no token.
-Keep that cookie's `SameSite` at `Strict` (`Lax` also works). A lure to the callback link is not
-stopped by either shape: it still needs the victim's own click on the button, in both shapes.
+Keep that cookie's `SameSite` at `Strict` (`Lax` also works). A lure to the callback link itself is not
+stopped by either shape: a victim who opens the attacker's own link is signed in to the attacker's
+account. Show the signed-in address on every account page, so a customer notices before entering a
+card or an address.
 
-Either way the exchange is a POST, the button is a real click (never an auto-submitting form, never
-a script), and the GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
-Redirecting before the button is fine: a redirect does not spend the link, a call to core does. A
-link works once, for 15 minutes; a newer link replaces it.
+Either way the exchange is a POST from the page, never a call to core while answering the GET, and the
+GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. A link works for 15 minutes,
+as often as it is opened; a newer link replaces one that was not used yet, and one already used keeps
+working until it expires.
 
 **The session stays on the server.** `exchangeLoginToken` hands the session over only as `cookie`:
 `__Host-adbl_customer`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` (your `/api/account/*` handlers
@@ -770,7 +780,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/shop/subscription-plan/{id}` | 404 unless that plan is listed |
 | `POST /api/subscription/checkout` | opens a subscription in core and at Stripe (`startSubscriptionCheckout`), or with `preview: true` only prices it (`previewSubscriptionCheckout`); 429 beyond 10 per visitor (`X-Shop-Client-Ip`) or 300 per shop server a minute |
 | `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
-| `POST /api/customer/login-link` | mails a customer a one-time sign-in link (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
+| `POST /api/customer/login-link` | mails a customer a sign-in link, valid 15 minutes (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
 | `POST /api/customer/session` | exchanges the link's token for a 30-day session (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID`; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
 | `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
 | `GET /api/customer/subscription[/{id}]`, `GET /api/customer/transaction` | the signed-in customer's subscriptions and payments (`X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |

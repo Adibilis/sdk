@@ -78,9 +78,10 @@ export function expiredCustomerSessionCookie(): CustomerSessionCookie {
 }
 
 /**
- * Asks core to mail the customer a one-time sign-in link to `returnUrl?token=…`, valid 15 minutes. Core answers **202** for every
- * address — a customer's, a stranger's, a staff member's — so the page always says "check your inbox" and never reveals who is
- * a customer. Only a customer with a paid order or subscription gets a mail; a new link replaces the unused older ones.
+ * Asks core to mail the customer a sign-in link to `returnUrl?token=…`, valid 15 minutes and usable as often as it is opened until
+ * then. Core answers **202** for every address — a customer's, a stranger's, a staff member's — so the page always says "check
+ * your inbox" and never reveals who is a customer. Only a customer with a paid order or subscription gets a mail; a new link
+ * replaces the older ones not used yet.
  *
  * Refused: 400 `SHOP_ORIGIN_NOT_ALLOWED` (`returnUrl` outside core's allowed shop origins — a setup error), 429 beyond 5 links per
  * visitor a minute (or 120 per shop server; 5 an hour per address are dropped silently), 404 `SHOP_MODULE_DISABLED`.
@@ -97,11 +98,12 @@ export async function requestLoginLink(client: AdibilisClient, request: Customer
 }
 
 /**
- * Turns the mailed token into a 30-day portal session and returns the cookie that carries it. The link works once: call this
- * from a **POST** your callback page submits when the customer clicks, never while rendering the GET of the link — mail
- * scanners open links before people do, and a GET that exchanged would spend the link on the scanner.
+ * Turns the mailed token into a 30-day portal session and returns the cookie that carries it. Core accepts a link every time
+ * until it expires, each time with a new session, so a mail scanner that opens it first leaves it working for the customer. Call
+ * this from a **POST** the continue page sends as soon as it loads, never while answering the GET of the link: the token is
+ * then out of the address bar and the history before core sees it.
  *
- * 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for a used, expired, replaced or unknown link (`customerRefusalOf`): offer a new one.
+ * 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for an expired, replaced or unknown link (`customerRefusalOf`): offer a new one.
  * 429 beyond 30 exchanges and logouts per visitor a minute.
  */
 export async function exchangeLoginToken(client: AdibilisClient, token: string, options: ShopCallOptions): Promise<CustomerSignIn> {

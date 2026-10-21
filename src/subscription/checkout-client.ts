@@ -163,8 +163,9 @@ export async function previewSubscriptionCheckout(
 
 /**
  * Opens the subscription in core and at Stripe and returns the secret the browser confirms: `secretKind` `PAYMENT` →
- * `stripe.confirmPayment` (the first period is charged now), `SETUP` → `stripe.confirmSetup` (a start date was chosen; the card
- * is saved and charged on that date) — see `confirmMethodOf`.
+ * `stripe.confirmPayment`. The first cycle is charged now, with a start date too (its deliveries begin on that date), and the
+ * subscription is active once that payment went through. `SETUP` → `stripe.confirmSetup` only resumes a start-date checkout opened
+ * by a core release before 1.9.7 — see `confirmMethodOf`.
  *
  * Core checks `expectedAmount` before it creates anything: a different first charge is a 409 `SUBSCRIPTION_AMOUNT_CHANGED`
  * (`subscriptionCheckoutRefusalOf`). The same `(externalSource, externalRef)` resumes an unpaid checkout, but only with the same
@@ -189,12 +190,12 @@ export async function startSubscriptionCheckout(
 
 /**
  * The subscription behind a shop reference, for the return page. While core still says `INCOMPLETE`, `firstPaymentStatus`
- * follows Stripe live: `SUCCEEDED` once the first charge (or, with a start date, the saved card) went through. `status` turns
- * `ACTIVE` only when core's webhook lands. **404** `SUBSCRIPTION_NOT_FOUND` for an unknown reference.
+ * follows Stripe live: `SUCCEEDED` once the first charge went through, with or without a start date. `status` turns `ACTIVE` only
+ * when core's webhook lands. **404** `SUBSCRIPTION_NOT_FOUND` for an unknown reference.
  *
- * A subscription with a trial and a confirmed setup reports `firstPaymentStatus` `SUCCEEDED` and `stripeStatus` `"trialing"`:
- * the card is saved, but no money has moved yet. Word the return page accordingly ("your subscription is set up"), not
- * "payment received".
+ * A start-date subscription reports `stripeStatus` `"trialing"` until its second charge: Stripe's trial only defers that charge,
+ * the first cycle is paid. A start-date checkout opened by a core release before 1.9.7 is the exception: its `SUCCEEDED` means
+ * the card was saved and nothing was charged yet, so word that return page "set up", not "payment received".
  */
 export async function getSubscriptionStatus(
     client: AdibilisClient,

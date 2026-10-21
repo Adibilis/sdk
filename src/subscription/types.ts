@@ -112,8 +112,9 @@ export interface SubscriptionCheckoutStatus {
 }
 
 /**
- * Which Stripe.js call takes the checkout's `clientSecret`: a charge now (`PAYMENT`, an invoice's PaymentIntent) or a card saved
- * for a chosen start date (`SETUP`, a SetupIntent). Calling the other one fails at Stripe.
+ * Which Stripe.js call takes the checkout's `clientSecret`: the first charge (`PAYMENT`, an invoice's PaymentIntent — every new
+ * checkout, with or without a start date) or a SetupIntent (`SETUP`, only when a start-date checkout opened by a core release
+ * before 1.9.7 is resumed). Calling the other one fails at Stripe.
  */
 export function confirmMethodOf(secretKind: SubscriptionSecretKind): 'confirmPayment' | 'confirmSetup' {
     switch (secretKind) {
