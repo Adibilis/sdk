@@ -769,6 +769,58 @@ an empty page. `properties` ships **disabled** on a fresh install; an operator e
 `adbl_module` row directly in the database (there is no API for it), and the change can take up to
 two cache TTLs to land.
 
+## Google reviews
+
+Once the tenant connects its Google Business Profile in core, one call gives the site its reviews.
+Fetch them in a server component:
+
+```tsx
+import { fetchGoogleReviews } from '@adbls/sdk/server';
+
+export async function Reviews() {
+    const { rating, reviewCount, reviews } = await fetchGoogleReviews(core);
+    if (reviews.length === 0) return null;
+
+    return (
+        <section>
+            <p>{rating?.toFixed(1)} ★ · {reviewCount} reviews on Google</p>
+            {reviews.map((review) => (
+                <figure key={review.createTime + review.authorName}>
+                    {review.authorPhotoUrl && <img src={review.authorPhotoUrl} alt="" />}
+                    <figcaption>{review.authorName} · {'★'.repeat(review.starRating)}</figcaption>
+                    {review.comment && <blockquote>{review.comment}</blockquote>}
+                    {review.replyComment && <p>Reply from the owner: {review.replyComment}</p>}
+                </figure>
+            ))}
+            <a href={process.env.GOOGLE_PROFILE_URL}>See all reviews on Google</a>
+        </section>
+    );
+}
+```
+
+- **Hide the section when `reviews` is empty.** A tenant that has not connected Google, or has not
+  chosen a location, gets `{ reviewCount: 0, reviews: [] }` and no `rating` — a 200, never an
+  error. Render nothing rather than "0 reviews".
+- **Core never calls Google on your request.** It answers from what its daily refresh stored, so the
+  call is fast and cannot hit Google's quota. A failed refresh keeps the last stored reviews, so the
+  list can be a few days old but does not disappear.
+- **Every stored review comes back, newest first** — not a sample. Slice it yourself if the page
+  shows only a few.
+- `comment` is `''` for a rating left without text; `replyComment` is the owner's answer, if any.
+
+Google sets the rules for showing these reviews:
+
+- **Say they come from Google**: the Google logo or the word "Google" next to the reviews.
+- **Show each reviewer as delivered**: `authorName`, and `authorPhotoUrl` where there is one. Do not
+  shorten, translate or replace either.
+- **Never edit the review text.** No trimming, no rewording, no picking sentences; show `comment` as
+  it is, or not at all.
+- **Link to Google.** The response carries no per-review link, so link the business's Google
+  profile (keep its URL in your own config).
+- **Do not keep your own copy.** Fetch per render (or with the short revalidation your framework
+  uses for the page) and never write the reviews into a database, a file or a long-lived cache — core
+  already holds the copy Google's terms allow.
+
 ## Health
 
 One call, for the satellite's own health endpoint:
@@ -825,9 +877,10 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.7`,
-the first core release with stock availability (`ShopProductResponse.available` and the 409
-`SHOP_PRODUCT_NOT_AVAILABLE` checkout refusal).
+The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.9`,
+the first core release serving `GET /api/review/published` (`fetchGoogleReviews`); an older core
+answers it with 404. `^1.9.7` was the first with stock availability (`ShopProductResponse.available`
+and the 409 `SHOP_PRODUCT_NOT_AVAILABLE` checkout refusal).
 `submitPropertyEnquiry` **needs core ≥ v1.5.1**: an older core lacks
 `POST /api/property/{id}/enquiry`, and the resulting 404/405 reads like "property not published".
 Core `v1.4.6` was the first release carrying
@@ -893,6 +946,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/property/lead/{token}` | the lead behind a public token; the first read stamps `viewedAt` |
 | `POST /api/property/lead/{token}/valuation-request` | stamps the request and mails the team; idempotent |
 | `POST /api/property/{id}/enquiry` | accepts a visitor's enquiry about a published property (`submitPropertyEnquiry`); 202 = accepted (honeypot hits and rate-limit drops too), 400 = validation (`body.violations`), 503 = not stored |
+| `GET /api/review/published` | the tenant's stored Google reviews (`fetchGoogleReviews`); no module gate; an empty list, not an error, while Google is not connected |
 
 The six property endpoints answer **403** while the `properties` module row is disabled — unlike
 `/api/shop/holidays`, which 404s while `shop` is disabled. Not a typo in either place: holidays
