@@ -15,7 +15,7 @@ The export map is the architectural boundary of this package, not a convenience:
 |---|---|---|
 | `@adbls/sdk` | forms, order model, holidays, product image/price helpers, schedule and portal helpers | **yes** |
 | `@adbls/sdk/checkout` | the React checkout context | **yes** |
-| `@adbls/sdk/server` | the API client, the checkout, shop catalog, subscription, customer portal and properties calls — **holds the WEBSITE key and customer sessions** | **no — server only** |
+| `@adbls/sdk/server` | the API client, the checkout, shop catalog, newsletter sign-up, subscription, customer portal and properties calls — **holds the WEBSITE key and customer sessions** | **no — server only** |
 
 Plus `@adbls/sdk/checkout` for the React checkout context — a separate subpath so the root entry
 imports cleanly in a project with no React at all.
@@ -572,6 +572,45 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
 - **`taxAmount` is always the order's VAT total** — Stripe's figure on an account with automatic
   tax, core's own otherwise. It used to be `0` unless automatic tax was on.
 
+## Newsletter
+
+A sign-up form on the shop posts to your server, which signs the visitor up:
+
+```typescript
+import { subscribeNewsletter } from '@adbls/sdk/server';
+
+await subscribeNewsletter(core, {
+    firstname, lastname, email,            // required
+    consent: true,                         // must be `true` — collect consent before submitting
+    website,                               // the honeypot input's raw value — see below
+    language: 'de',                        // optional: de, fr, it or en — lower-case, exactly these
+}, { clientIp });                          // the visitor's IP, from your request
+```
+
+| Answer | Meaning |
+|---|---|
+| `202` | **accepted** — the call resolves with nothing, for a new address, a known one and one already subscribed alike |
+| `400` | validation — core's violations are in `err.body`: `NEWSLETTER_CONSENT_REQUIRED` for `consent: false`, `NotNull` on `consent` when it is missing, the Bean Validation codes for the other fields (a `language` like `de-CH` or `DE` included). Not retryable |
+| `429` | `TOO_MANY_REQUESTS` — beyond 5 sign-ups a minute per visitor (`X-Shop-Client-Ip`), or 120 a minute per shop server |
+| `503` | `NEWSLETTER_NOT_STORED`, with `Retry-After: 60` — core could not store the sign-up (e.g. its Newsletter group is missing until core restarts with the shop module on). Ask the visitor to **try again later** |
+| `401` / `403` | the WEBSITE key is missing, wrong or not allowed to sign people up |
+
+Every non-2xx is an `AdibilisApiError`; read its `status`.
+
+- **The page always says the same thing.** Core gives the same empty 202 whether the address was
+  new, known or already subscribed, so the form never reveals who is on the list.
+- **`website` is the honeypot**, exactly as for `submitPropertyEnquiry`: a hidden input a person
+  leaves empty. Forward its raw value and never set it yourself. A non-blank `website` skips every
+  local check and is sent as-is, so a bot gets core's silent 202 rather than a client-side
+  rejection that would reveal the trap.
+- **`clientIp` on every call**, as for `requestLoginLink`: core rate-limits per visitor with it. An
+  address that is no IPv4 or IPv6 literal (a host name, a forwarded-for list) is a `ZodError` before
+  any request.
+- **`language` is not a locale.** Core takes `de`, `fr`, `it` or `en` and answers 400 for anything
+  else; the SDK does not normalise, so map `de-CH` to `de` yourself.
+- A blank first or last name, an `email` that is no address, a `consent` other than `true` or a
+  `language` outside those four is a `ZodError` before any request; every other rule is core's.
+
 ## Properties
 
 Six server-side calls cover a real-estate satellite end to end: a public listing, a public detail
@@ -803,6 +842,9 @@ the customer session and the portal; an older core answers their endpoints with 
 generated ones; the release that raises the dependency replaces it with re-exports, and nothing that
 imports from the SDK changes.
 
+`subscribeNewsletter` needs a core release that serves `POST /api/shop/newsletter`; an older core
+refuses it (typically with a 404).
+
 `invoicePdf` and the transactions' `invoiceId` / `invoiceNumber` need the core release after 1.9.7
 that serves `GET /api/customer/invoice/{id}/pdf`. An older core answers that path with 404 and still
 sends Stripe's `hostedInvoiceUrl` / `invoicePdfUrl` on the rows instead, which this SDK no longer
@@ -836,6 +878,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/shop/subscription-plan/{id}` | 404 unless that plan is listed |
 | `POST /api/subscription/checkout` | opens a subscription in core and at Stripe (`startSubscriptionCheckout`), or with `preview: true` only prices it (`previewSubscriptionCheckout`); 429 beyond 10 per visitor (`X-Shop-Client-Ip`) or 300 per shop server a minute |
 | `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `POST /api/shop/newsletter` | signs a visitor up for the newsletter (`subscribeNewsletter`); always 202 for an accepted sign-up (new, known or already subscribed address, honeypot hit); 400 = validation; 429 beyond 5 per visitor (`X-Shop-Client-Ip`) or 120 per shop server a minute; 503 `NEWSLETTER_NOT_STORED` (`Retry-After: 60`) = not stored, try again later |
 | `POST /api/customer/login-link` | mails a customer a one-time sign-in link, valid 15 minutes (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
 | `POST /api/customer/session` | exchanges the link's token for a 30-day session, once per link (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for a used, expired or unknown link; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
 | `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
