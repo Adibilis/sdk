@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@adbls/api-types':
-        specifier: ^1.7.0
-        version: 1.7.0(zod@4.4.3)
+        specifier: ^1.9.7
+        version: 1.9.7(zod@4.4.3)
       react:
         specifier: '>=19'
         version: 19.2.8
@@ -39,8 +39,8 @@ importers:
 
 packages:
 
-  '@adbls/api-types@1.7.0':
-    resolution: {integrity: sha512-J8J/W15Oygu0crA/2T+3Eo3zCvHHgqVBLekrkajoqtgQQhzInCvkElO3U2azJbQJAa2Tpk+5t4a1DMl57WB9Hg==}
+  '@adbls/api-types@1.9.7':
+    resolution: {integrity: sha512-dLrxKpalT8R1FnzmoXV0Zr20FZoEEIN7X4TVeIQUKvDJpK7ZPhG36h/6vEImdNLuqsme11wQBYcbi7/V69PdCw==}
     peerDependencies:
       zod: ^4.1.12
 
@@ -707,7 +707,7 @@ packages:
 
 snapshots:
 
-  '@adbls/api-types@1.7.0(zod@4.4.3)':
+  '@adbls/api-types@1.9.7(zod@4.4.3)':
     dependencies:
       zod: 4.4.3
 

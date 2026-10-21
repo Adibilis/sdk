@@ -49,7 +49,7 @@ browser. The order — and its Stripe invoice — only comes into being when the
 until then a **preview** prices the cart and creates nothing.
 
 ```typescript
-import { createAdibilisClient, previewCheckout, startCheckout, amountChangedOf, getOrderStatus } from '@adbls/sdk/server';
+import { createAdibilisClient, previewCheckout, startCheckout, amountChangedOf, productUnavailableOf, getOrderStatus } from '@adbls/sdk/server';
 
 const core = createAdibilisClient({ baseUrl: process.env.ADIBILIS_BASE_URL!, apiKey: process.env.ADIBILIS_API_KEY! });
 const request = {
@@ -68,8 +68,10 @@ try {
     // hand clientSecret to the browser: stripe.confirmPayment({ elements, clientSecret, confirmParams: { return_url } })
 } catch (error) {
     const newAmount = amountChangedOf(error); // number on 409 CHECKOUT_AMOUNT_CHANGED, otherwise null
-    if (newAmount === null) throw error;
-    // core already voided the invoice: preview again, tell the buyer the price changed, let them pay again
+    const unavailable = productUnavailableOf(error); // { productId, country } on 409 SHOP_PRODUCT_NOT_AVAILABLE, otherwise null
+    if (newAmount === null && unavailable === null) throw error;
+    // amount changed → core already voided the invoice: preview again, tell the buyer the price changed, let them pay again
+    // unavailable → nothing was created: say "not available for delivery to <country>", remove or mark the line, preview again
 }
 
 // 3. From your success page's route handler: the truth is core's, not the browser's.
@@ -92,6 +94,11 @@ the real checkout will carry; only the country is required. A Stripe rejection o
 (e.g. `customer_tax_location_invalid` where a postal code is needed) surfaces as a 400
 `PAYMENT_PROVIDER_ERROR`.
 `expectedAmount` is optional; without it core does not check the total.
+
+The preview refuses a line no distributor routed to the buyer's country can ship exactly as the
+checkout does (409 `SHOP_PRODUCT_NOT_AVAILABLE`, read with `productUnavailableOf`), so the shop
+learns it before "Pay". `country` is `null` when the order named no country. A resumed checkout is
+not checked again: its stock was decided when the order was created.
 
 Core, not the shop, holds the Stripe secret key, receives the webhook, marks the order paid and
 mails the buyer. The shop keeps only `@stripe/stripe-js` / `@stripe/react-stripe-js`, and
@@ -497,6 +504,10 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   A product with no price in that currency is refused (`SHOP_PRODUCT_NOT_PRICED`) before any order
   exists. Core routes the invoice to the Stripe account configured for that currency, so the
   `publishableKey` in the checkout response can differ between a CHF and a EUR order.
+- **`available` is `false` only for a product core sells "stop at 0" that no distributor can
+  ship**; show "Out of stock" instead of "Add to cart". It is not a per-country answer: checkout
+  can still refuse a line for the buyer's own country (`productUnavailableOf`, see Checkout). A core
+  older than `v1.9.7` sends no field, so read `available !== false`.
 - **`taxAmount` is always the order's VAT total** — Stripe's figure on an account with automatic
   tax, core's own otherwise. It used to be `0` unless automatic tax was on.
 
@@ -714,7 +725,9 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.5.1`.
+The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.7`,
+the first core release with stock availability (`ShopProductResponse.available` and the 409
+`SHOP_PRODUCT_NOT_AVAILABLE` checkout refusal).
 `submitPropertyEnquiry` **needs core ≥ v1.5.1**: an older core lacks
 `POST /api/property/{id}/enquiry`, and the resulting 404/405 reads like "property not published".
 Core `v1.4.6` was the first release carrying

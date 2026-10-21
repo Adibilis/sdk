@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import { AdibilisApiError } from '../src/client/errors';
-import { amountChangedOf, getOrderStatus, previewCheckout, startCheckout } from '../src/checkout/checkout-client';
+import { amountChangedOf, getOrderStatus, previewCheckout, productUnavailableOf, startCheckout } from '../src/checkout/checkout-client';
 
 const order = {
     externalRef: 'cart-7f3a',
@@ -137,6 +137,34 @@ describe('amountChangedOf', () => {
         ['a non-error', null],
     ])('returns null for %s', (_name, error) => {
         expect(amountChangedOf(error)).toBeNull();
+    });
+});
+
+describe('productUnavailableOf', () => {
+    const refusal = (status: number, errorList: unknown) =>
+        new AdibilisApiError(status, { error: 'x', errorList, url: '/api/payment/checkout' }, '/api/payment/checkout');
+
+    it('returns the product and country of a 409 SHOP_PRODUCT_NOT_AVAILABLE', () => {
+        const error = new AdibilisApiError(409, { errorList: { SHOP_PRODUCT_NOT_AVAILABLE: ['12', 'DE'] } }, '/api/payment/checkout');
+        expect(productUnavailableOf(error)).toEqual({ productId: 12, country: 'DE' });
+    });
+
+    it('reports no country when core had none to route by', () => {
+        expect(productUnavailableOf(refusal(409, { SHOP_PRODUCT_NOT_AVAILABLE: ['12', ''] }))).toEqual({ productId: 12, country: null });
+        expect(productUnavailableOf(refusal(409, { SHOP_PRODUCT_NOT_AVAILABLE: ['12'] }))).toEqual({ productId: 12, country: null });
+    });
+
+    it.each([
+        ['the amount-changed refusal', refusal(409, { CHECKOUT_AMOUNT_CHANGED: ['10.80'] })],
+        ['another status', refusal(400, { SHOP_PRODUCT_NOT_AVAILABLE: ['12', 'DE'] })],
+        ['a non-numeric id', refusal(409, { SHOP_PRODUCT_NOT_AVAILABLE: ['x', 'DE'] })],
+        ['a fractional id', refusal(409, { SHOP_PRODUCT_NOT_AVAILABLE: ['1.5', 'DE'] })],
+        ['no param', refusal(409, { SHOP_PRODUCT_NOT_AVAILABLE: [] })],
+        ['a body without errorList', new AdibilisApiError(409, 'conflict', '/p')],
+        ['a foreign error', new Error('boom')],
+        ['a non-error', null],
+    ])('is null for %s', (_name, error) => {
+        expect(productUnavailableOf(error)).toBeNull();
     });
 });
 

@@ -17,6 +17,7 @@ const product = {
     ],
     mainImagePath: '/api/public/media/product/12/one.webp',
     images: [{ path: '/api/public/media/product/12/one.webp' }],
+    available: true,
 } as const satisfies ShopProductResponse;
 
 const clientRespondingWith = (status: number, body: unknown) => {
@@ -35,6 +36,11 @@ describe('fetchShopProducts', () => {
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toBe('https://core.test/api/shop/product');
         expect((init.headers as Record<string, string>)['X-API-Secret-Key']).toBe('k');
+    });
+
+    it('passes the availability core reports through untouched', async () => {
+        const { client } = clientRespondingWith(200, [{ ...product, available: false }]);
+        expect((await fetchShopProducts(client))[0]?.available).toBe(false);
     });
 
     it('surfaces satellites being switched off in core as a 403, not an empty shop', async () => {

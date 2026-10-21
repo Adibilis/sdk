@@ -7,13 +7,14 @@ export { AdibilisApiError } from './client/errors.js';
 export { fetchHolidays } from './shop/holidays-client.js';
 export { checkCore } from './status/core-check.js';
 export type { CoreCheck, CoreCheckOptions } from './status/core-check.js';
-export { startCheckout, previewCheckout, amountChangedOf, getOrderStatus } from './checkout/checkout-client.js';
+export { startCheckout, previewCheckout, amountChangedOf, productUnavailableOf, getOrderStatus } from './checkout/checkout-client.js';
 export type {
     CheckoutPreview,
     CheckoutRequest,
     CheckoutResponse,
     CheckoutStartRequest,
     PaymentStatusResponse,
+    ProductUnavailable,
 } from './checkout/checkout-client.js';
 export {
     fetchPropertyLead,
