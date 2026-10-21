@@ -507,7 +507,7 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
 - **`available` is `false` only for a product core sells "stop at 0" that no distributor can
   ship**; show "Out of stock" instead of "Add to cart". It is not a per-country answer: checkout
   can still refuse a line for the buyer's own country (`productUnavailableOf`, see Checkout). A core
-  older than `vX.Y.Z` sends no field, so read `available !== false`.
+  older than `v1.9.7` sends no field, so read `available !== false`.
 - **`taxAmount` is always the order's VAT total** — Stripe's figure on an account with automatic
   tax, core's own otherwise. It used to be `0` unless automatic tax was on.
 
@@ -725,7 +725,7 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: `^X.Y.Z`,
+The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.7`,
 the first core release with stock availability (`ShopProductResponse.available` and the 409
 `SHOP_PRODUCT_NOT_AVAILABLE` checkout refusal).
 `submitPropertyEnquiry` **needs core ≥ v1.5.1**: an older core lacks

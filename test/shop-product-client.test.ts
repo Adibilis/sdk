@@ -17,6 +17,7 @@ const product = {
     ],
     mainImagePath: '/api/public/media/product/12/one.webp',
     images: [{ path: '/api/public/media/product/12/one.webp' }],
+    available: true,
 } as const satisfies ShopProductResponse;
 
 const clientRespondingWith = (status: number, body: unknown) => {
@@ -39,9 +40,7 @@ describe('fetchShopProducts', () => {
 
     it('passes the availability core reports through untouched', async () => {
         const { client } = clientRespondingWith(200, [{ ...product, available: false }]);
-        // TODO: drop the cast and add available: true to the product fixture once @adbls/api-types carries ShopProductResponse.available [2026-10-20]
-        const [first] = (await fetchShopProducts(client)) as unknown as { available?: boolean }[];
-        expect(first?.available).toBe(false);
+        expect((await fetchShopProducts(client))[0]?.available).toBe(false);
     });
 
     it('surfaces satellites being switched off in core as a 403, not an empty shop', async () => {
