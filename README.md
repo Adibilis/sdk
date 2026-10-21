@@ -306,7 +306,7 @@ try {
     // then 303 to /account
 } catch (error) {
     if (customerRefusalOf(error)?.code !== 'CUSTOMER_LOGIN_TOKEN_INVALID') throw error;
-    // "This link has expired", with the form for a new one
+    // "This link was used or has expired", with the form for a new one
 }
 
 // 4. Every account page and handler (a raw `Cookie` header string works too; with duplicates the last one wins, like Next's store)
@@ -337,22 +337,24 @@ try {
 }
 ```
 
-**The link signs in by itself, through a POST, never from the GET of the link.** Core accepts a link
-every time it is used until it expires, each time with a new session. Mail scanners (Outlook Safe
-Links and others) open every link in a mail before the customer does, some with JavaScript running;
-such a scanner signs itself in, in its own cookie jar, and the link still works for the customer. So
-the page the link leads to exchanges the token as soon as it loads, without a button to click. Two
-shapes are allowed, and only these:
+**The link works once, and is spent by a POST from the page, never by the GET of the link.** The
+first exchange opens a session; any later one — a reload, a second click, the link opened again
+after a logout — answers 401 `CUSTOMER_LOGIN_TOKEN_INVALID`. Mail scanners (Outlook Safe Links and
+others) open every link in a mail before the customer does: a callback that exchanged the token while
+answering the GET would spend every link on the scanner. The page the link leads to may sign in
+without a click, by POSTing as soon as it loads; a scanner that runs the page's script then uses the
+link up, and the customer finds it spent and asks for a new one. A "Sign in" button that POSTs costs
+one click, and scanners do not click it. Two shapes are allowed, and only these:
 
-- `GET /account/callback?token=…` renders a page that POSTs the token as soon as it loads (shape 1;
-  its POST handler must be same-origin only, see below); or
+- `GET /account/callback?token=…` renders a page that POSTs the token, as soon as it loads or on a
+  click (shape 1; its POST handler must be same-origin only, see below); or
 - (shape 2) the template's flow: the GET callback route does **not** call core. It stores the token in a
   short `httpOnly` cookie, `adbl_login` (900 s, `Secure`, `SameSite=Strict`, `Path=/api/account/session`),
   and answers 303 to `/account/continue` with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`,
   so the token leaves the address bar and the browser history at once. The continue page POSTs to
-  `/api/account/session` as soon as it loads; that handler reads the token from the cookie, calls
-  `exchangeLoginToken`, deletes the cookie, sets `__Host-adbl_customer` and the page goes on to the
-  account.
+  `/api/account/session`, as soon as it loads or on a click; that handler reads the token from the
+  cookie, calls `exchangeLoginToken`, deletes the cookie, sets `__Host-adbl_customer` and the page
+  goes on to the account.
   `Strict` works because the cookie is needed only on that same-site form POST; the cross-site
   navigation from the mail client does not need it. The handoff cookie keeps its name: it is not
   `__Host-`, because its `Path` is not `/`.
@@ -381,9 +383,10 @@ account. Show the signed-in address on every account page, so a customer notices
 card or an address.
 
 Either way the exchange is a POST from the page, never a call to core while answering the GET, and the
-GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. A link works for 15 minutes,
-as often as it is opened; a newer link replaces one that was not used yet, and one already used keeps
-working until it expires.
+GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. Redirecting before the POST
+is fine: a redirect does not spend the link, a call to core does. A link works once, for 15 minutes;
+a newer link replaces the unused older ones. On `CUSTOMER_LOGIN_TOKEN_INVALID` show the form for a
+new link.
 
 **The session stays on the server.** `exchangeLoginToken` hands the session over only as `cookie`:
 `__Host-adbl_customer`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` (your `/api/account/*` handlers
@@ -833,8 +836,8 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/shop/subscription-plan/{id}` | 404 unless that plan is listed |
 | `POST /api/subscription/checkout` | opens a subscription in core and at Stripe (`startSubscriptionCheckout`), or with `preview: true` only prices it (`previewSubscriptionCheckout`); 429 beyond 10 per visitor (`X-Shop-Client-Ip`) or 300 per shop server a minute |
 | `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
-| `POST /api/customer/login-link` | mails a customer a sign-in link, valid 15 minutes (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
-| `POST /api/customer/session` | exchanges the link's token for a 30-day session (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID`; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
+| `POST /api/customer/login-link` | mails a customer a one-time sign-in link, valid 15 minutes (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
+| `POST /api/customer/session` | exchanges the link's token for a 30-day session, once per link (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for a used, expired or unknown link; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
 | `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
 | `GET /api/customer/subscription[/{id}]`, `GET /api/customer/transaction` | the signed-in customer's subscriptions and payments (`X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
 | `GET /api/customer/invoice/{id}/pdf` | the PDF of an invoice in the signed-in customer's transactions (`invoicePdf`); 404 `INVOICE_NOT_FOUND` for any other; 429 beyond 10 per visitor or 300 per shop server a minute |

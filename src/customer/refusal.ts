@@ -24,7 +24,7 @@ const ACTION_REASONS: readonly SubscriptionActionRefusalReason[] = [
 export type CustomerRefusal =
     /** 401: the session expired, was revoked, or its person is no longer a customer. Clear the cookie and sign in again. */
     | { code: 'CUSTOMER_SESSION_INVALID' }
-    /** 401: the mailed link expired, was replaced by a newer one before it was used, or never existed. Offer a new link. */
+    /** 401: the mailed link was used, expired, replaced by a newer one or never existed. Offer a new link. */
     | { code: 'CUSTOMER_LOGIN_TOKEN_INVALID' }
     /** 404: core's shop module is off — the portal is closed. */
     | { code: 'SHOP_MODULE_DISABLED' }
