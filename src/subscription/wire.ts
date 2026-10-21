@@ -14,12 +14,22 @@ export type SubscriptionStatus = 'INCOMPLETE' | 'ACTIVE' | 'PAST_DUE' | 'PAUSED'
 export type SubscriptionSecretKind = 'PAYMENT' | 'SETUP';
 
 export const SchedulePatternModel = z.object({
-    kind: z.enum(['WEEKLY', 'MONTHLY', 'YEARLY']),
+    kind: z.enum(['WEEKLY', 'MONTHLY', 'MONTHLY_WEEKDAY', 'YEARLY']),
     weekdays: z.array(z.enum(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'])).optional().nullable(),
     everyNWeeks: z.number().int().min(1).max(52).optional().nullable(),
     dayOfMonth: z.number().int().min(1).max(31).optional().nullable(),
     month: z.number().int().min(1).max(12).optional().nullable(),
     day: z.number().int().min(1).max(31).optional().nullable(),
+    // Core's generated schema only has @Min(-1) @Max(4); its @ValidSchedulePattern also refuses 0, which zod would otherwise let through.
+    weekOfMonth: z
+        .number()
+        .int()
+        .min(-1)
+        .max(4)
+        .refine((week) => week !== 0, { message: 'weekOfMonth is 1–4, or -1 for the last' })
+        .optional()
+        .nullable(),
+    weekday: z.enum(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']).optional().nullable(),
 });
 export type SchedulePattern = z.infer<typeof SchedulePatternModel>;
 

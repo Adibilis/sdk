@@ -78,6 +78,8 @@ export function occurrences(pattern: SchedulePattern, anchor: string, from: stri
             return weekly(required(p.weekdays, 'weekdays'), required(p.everyNWeeks, 'everyNWeeks'), anchorDay, start, end);
         case 'MONTHLY':
             return monthly(required(p.dayOfMonth, 'dayOfMonth'), start, end);
+        case 'MONTHLY_WEEKDAY':
+            return monthlyWeekday(required(p.weekOfMonth, 'weekOfMonth'), required(p.weekday, 'weekday'), start, end);
         case 'YEARLY':
             return yearly(required(p.month, 'month'), required(p.day, 'day'), start, end);
     }
@@ -112,6 +114,28 @@ function monthly(dayOfMonth: number, start: number, end: number): string[] {
     return result;
 }
 
+/** The `weekOfMonth`-th (1–4) or, for -1, the last `weekday` of each month. */
+function monthlyWeekday(weekOfMonth: number, weekday: Weekday, start: number, end: number): string[] {
+    const target = WEEKDAYS.indexOf(weekday);
+    const result: string[] = [];
+    const first = new Date(start * DAY_MS);
+    for (let index = first.getUTCFullYear() * 12 + first.getUTCMonth(); ; index++) {
+        const year = Math.floor(index / 12);
+        const month = (index % 12) + 1;
+        const firstOfMonth = epochDayOf(year, month, 1);
+        if (firstOfMonth > end) break;
+        let day: number;
+        if (weekOfMonth === -1) {
+            const lastOfMonth = epochDayOf(year, month, lengthOfMonth(year, month));
+            day = lastOfMonth - ((isoWeekday(lastOfMonth) - target + 7) % 7);
+        } else {
+            day = firstOfMonth + ((target - isoWeekday(firstOfMonth) + 7) % 7) + (weekOfMonth - 1) * 7;
+        }
+        if (day >= start && day < end) result.push(fromEpochDay(day));
+    }
+    return result;
+}
+
 function yearly(month: number, dayOfMonth: number, start: number, end: number): string[] {
     const result: string[] = [];
     for (let year = yearOf(start); year <= yearOf(end); year++) {
@@ -132,8 +156,10 @@ function inRange(value: number | null | undefined, min: number, max: number): bo
 /** What core's `@Valid` accepts as a schedule: the fields of its kind, nothing else, each within range; 29 Feb is a valid yearly date. */
 export function isWellFormedPattern(pattern: SchedulePattern | null | undefined): boolean {
     if (!pattern?.kind) return false;
-    const { weekdays, everyNWeeks, dayOfMonth, month, day } = pattern;
+    const { weekdays, everyNWeeks, dayOfMonth, month, day, weekOfMonth, weekday } = pattern;
     if (!inRange(everyNWeeks, 1, 52) || !inRange(dayOfMonth, 1, 31) || !inRange(month, 1, 12) || !inRange(day, 1, 31)) return false;
+    if (!inRange(weekOfMonth, -1, 4)) return false;
+    const noMonthlyWeekday = weekOfMonth == null && weekday == null;
     switch (pattern.kind) {
         case 'WEEKLY':
             return (
@@ -143,10 +169,23 @@ export function isWellFormedPattern(pattern: SchedulePattern | null | undefined)
                 everyNWeeks != null &&
                 dayOfMonth == null &&
                 month == null &&
-                day == null
+                day == null &&
+                noMonthlyWeekday
             );
         case 'MONTHLY':
-            return dayOfMonth != null && weekdays == null && everyNWeeks == null && month == null && day == null;
+            return dayOfMonth != null && weekdays == null && everyNWeeks == null && month == null && day == null && noMonthlyWeekday;
+        case 'MONTHLY_WEEKDAY':
+            return (
+                weekOfMonth != null &&
+                weekOfMonth !== 0 &&
+                weekday != null &&
+                WEEKDAYS.includes(weekday) &&
+                weekdays == null &&
+                everyNWeeks == null &&
+                dayOfMonth == null &&
+                month == null &&
+                day == null
+            );
         case 'YEARLY':
             return (
                 month != null &&
@@ -154,7 +193,8 @@ export function isWellFormedPattern(pattern: SchedulePattern | null | undefined)
                 day <= lengthOfMonth(2000, month) &&
                 weekdays == null &&
                 everyNWeeks == null &&
-                dayOfMonth == null
+                dayOfMonth == null &&
+                noMonthlyWeekday
             );
         default:
             return false;
@@ -163,7 +203,16 @@ export function isWellFormedPattern(pattern: SchedulePattern | null | undefined)
 
 function canonical(pattern: SchedulePattern): string {
     const p = normalizePattern(pattern);
-    return JSON.stringify([p.kind, p.weekdays ?? null, p.everyNWeeks ?? null, p.dayOfMonth ?? null, p.month ?? null, p.day ?? null]);
+    return JSON.stringify([
+        p.kind,
+        p.weekdays ?? null,
+        p.everyNWeeks ?? null,
+        p.dayOfMonth ?? null,
+        p.month ?? null,
+        p.day ?? null,
+        p.weekOfMonth ?? null,
+        p.weekday ?? null,
+    ]);
 }
 
 /**

@@ -18,6 +18,7 @@ const cases = JSON.parse(readFileSync(new URL('./fixtures/core/schedule/occurren
 const weekly = (weekdays: SchedulePattern['weekdays'], everyNWeeks: number): SchedulePattern => ({ kind: 'WEEKLY', weekdays, everyNWeeks });
 const monthly = (dayOfMonth: number): SchedulePattern => ({ kind: 'MONTHLY', dayOfMonth });
 const yearly = (month: number, day: number): SchedulePattern => ({ kind: 'YEARLY', month, day });
+const monthlyWeekday = (weekOfMonth: number, weekday: SchedulePattern['weekday']): SchedulePattern => ({ kind: 'MONTHLY_WEEKDAY', weekOfMonth, weekday });
 const free = (freeKind: ScheduleDefinition['freeKind'], everyNWeeks?: number, min?: number, max?: number): ScheduleDefinition => ({
     mode: 'CUSTOMER_FREE',
     freeKind,
@@ -33,6 +34,7 @@ describe('occurrences (core fixture)', () => {
 
     it('runs every core case', () => {
         expect(cases.length).toBeGreaterThanOrEqual(8);
+        expect(cases.some((c) => c.pattern.kind === 'MONTHLY_WEEKDAY')).toBe(true);
     });
 });
 
@@ -40,6 +42,10 @@ describe('nextOccurrence', () => {
     it('is the first date on or after from', () => {
         expect(nextOccurrence(weekly(['TUE', 'FRI'], 1), '2026-10-14', '2026-10-14')).toBe('2026-10-16');
         expect(nextOccurrence(weekly(['TUE', 'FRI'], 1), '2026-10-14', '2026-10-16')).toBe('2026-10-16');
+    });
+
+    it('finds the last weekday of the month', () => {
+        expect(nextOccurrence(monthlyWeekday(-1, 'FRI'), '2026-10-31', '2026-10-31')).toBe('2026-11-27');
     });
 
     it('looks into next year for a yearly date', () => {
@@ -87,6 +93,22 @@ describe('validateScheduleChoice (twin of ScheduleChoiceValidator)', () => {
         expect(validateScheduleChoice(choice, monthly(2))).toBe(false);
     });
 
+    it('CUSTOMER_CHOICE tells two monthly-weekday options apart', () => {
+        const choice: ScheduleDefinition = { mode: 'CUSTOMER_CHOICE', options: [monthlyWeekday(1, 'TUE')] };
+        expect(validateScheduleChoice(choice, monthlyWeekday(1, 'TUE'))).toBe(true);
+        expect(validateScheduleChoice(choice, monthlyWeekday(2, 'TUE'))).toBe(false);
+        expect(validateScheduleChoice(choice, monthlyWeekday(-1, 'TUE'))).toBe(false);
+        expect(validateScheduleChoice(choice, monthlyWeekday(1, 'WED'))).toBe(false);
+        expect(validateScheduleChoice({ mode: 'FIXED', pattern: monthlyWeekday(-1, 'FRI') }, monthlyWeekday(-1, 'FRI'))).toBe(true);
+        expect(validateScheduleChoice({ mode: 'FIXED', pattern: monthlyWeekday(-1, 'FRI') }, monthlyWeekday(4, 'FRI'))).toBe(false);
+    });
+
+    it('no CUSTOMER_FREE kind takes a monthly-weekday choice', () => {
+        expect(validateScheduleChoice(free('DAY_OF_MONTH'), monthlyWeekday(1, 'TUE'))).toBe(false);
+        expect(validateScheduleChoice(free('DATE'), monthlyWeekday(1, 'TUE'))).toBe(false);
+        expect(validateScheduleChoice(free('WEEKDAYS', 1, 1, 7), monthlyWeekday(1, 'TUE'))).toBe(false);
+    });
+
     it('CUSTOMER_FREE WEEKDAYS checks the count and the interval', () => {
         const definition = free('WEEKDAYS', 1, 1, 2);
         expect(validateScheduleChoice(definition, weekly(['TUE', 'FRI'], 1))).toBe(true);
@@ -118,6 +140,9 @@ describe('isWellFormedPattern (twin of @ValidSchedulePattern)', () => {
         expect(isWellFormedPattern(weekly(['TUE', 'FRI'], 1))).toBe(true);
         expect(isWellFormedPattern(monthly(31))).toBe(true);
         expect(isWellFormedPattern(yearly(2, 29))).toBe(true);
+        expect(isWellFormedPattern(monthlyWeekday(1, 'TUE'))).toBe(true);
+        expect(isWellFormedPattern(monthlyWeekday(4, 'SUN'))).toBe(true);
+        expect(isWellFormedPattern(monthlyWeekday(-1, 'FRI'))).toBe(true);
     });
 
     it.each([
@@ -130,6 +155,18 @@ describe('isWellFormedPattern (twin of @ValidSchedulePattern)', () => {
         ['day of month 32', monthly(32)],
         ['30 February', yearly(2, 30)],
         ['no month', { kind: 'YEARLY', day: 1 }],
+        ['week of month 0', monthlyWeekday(0, 'TUE')],
+        ['week of month 5', monthlyWeekday(5, 'TUE')],
+        ['week of month -2', monthlyWeekday(-2, 'TUE')],
+        ['a fractional week of month', monthlyWeekday(1.5, 'TUE')],
+        ['no week of month', { kind: 'MONTHLY_WEEKDAY', weekday: 'TUE' }],
+        ['no weekday', { kind: 'MONTHLY_WEEKDAY', weekOfMonth: 1 }],
+        ['an unknown weekday', { kind: 'MONTHLY_WEEKDAY', weekOfMonth: 1, weekday: 'tue' }],
+        ['a monthly-weekday day of month', { kind: 'MONTHLY_WEEKDAY', weekOfMonth: 1, weekday: 'TUE', dayOfMonth: 3 }],
+        ['a monthly-weekday weekday list', { kind: 'MONTHLY_WEEKDAY', weekOfMonth: 1, weekday: 'TUE', weekdays: ['TUE'] }],
+        ['a weekly week of month', { kind: 'WEEKLY', weekdays: ['TUE'], everyNWeeks: 1, weekOfMonth: 1 }],
+        ['a monthly weekday', { kind: 'MONTHLY', dayOfMonth: 1, weekday: 'TUE' }],
+        ['a yearly week of month', { kind: 'YEARLY', month: 2, day: 14, weekOfMonth: -1 }],
         ['no kind', null],
     ] as const)('refuses %s', (_name, pattern) => {
         expect(isWellFormedPattern(pattern as SchedulePattern | null)).toBe(false);

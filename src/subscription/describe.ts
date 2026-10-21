@@ -7,8 +7,15 @@ interface Phrases {
     weekly(days: string): string;
     everyNWeeks(n: number, days: string): string;
     monthly(day: number): string;
+    /** `week` is 1–4 or -1 (last); Sunday is passed so a language can inflect the ordinal for its gender. */
+    monthlyWeekday(week: number, day: string, sunday: boolean): string;
     yearly(date: string): string;
     billing: Record<BillingInterval, { one: string; many(n: number): string }>;
+}
+
+/** `words` is first…fourth, then last; `week` is 1–4 or -1. */
+function ordinal(week: number, words: readonly [string, string, string, string, string]): string {
+    return (week === -1 ? words[4] : words[week - 1]) ?? words[0];
 }
 
 const PHRASES: Record<Language, Phrases> = {
@@ -16,6 +23,7 @@ const PHRASES: Record<Language, Phrases> = {
         weekly: (days) => `Every week on ${days}`,
         everyNWeeks: (n, days) => `Every ${n} weeks on ${days}`,
         monthly: (day) => `Monthly on day ${day}`,
+        monthlyWeekday: (week, day) => `Every ${ordinal(week, ['first', 'second', 'third', 'fourth', 'last'])} ${day} of the month`,
         yearly: (date) => `Yearly on ${date}`,
         billing: {
             WEEK: { one: 'every week', many: (n) => `every ${n} weeks` },
@@ -27,6 +35,7 @@ const PHRASES: Record<Language, Phrases> = {
         weekly: (days) => `Jede Woche am ${days}`,
         everyNWeeks: (n, days) => `Alle ${n} Wochen am ${days}`,
         monthly: (day) => `Monatlich am ${day}.`,
+        monthlyWeekday: (week, day) => `Jeden ${ordinal(week, ['ersten', 'zweiten', 'dritten', 'vierten', 'letzten'])} ${day} im Monat`,
         yearly: (date) => `Jährlich am ${date}`,
         billing: {
             WEEK: { one: 'jede Woche', many: (n) => `alle ${n} Wochen` },
@@ -38,6 +47,7 @@ const PHRASES: Record<Language, Phrases> = {
         weekly: (days) => `Chaque semaine le ${days}`,
         everyNWeeks: (n, days) => `Toutes les ${n} semaines le ${days}`,
         monthly: (day) => `Chaque mois le ${day === 1 ? '1er' : day}`,
+        monthlyWeekday: (week, day) => `Chaque ${ordinal(week, ['premier', 'deuxième', 'troisième', 'quatrième', 'dernier'])} ${day} du mois`,
         yearly: (date) => `Chaque année le ${date}`,
         billing: {
             WEEK: { one: 'chaque semaine', many: (n) => `toutes les ${n} semaines` },
@@ -49,6 +59,8 @@ const PHRASES: Record<Language, Phrases> = {
         weekly: (days) => `Ogni settimana il ${days}`,
         everyNWeeks: (n, days) => `Ogni ${n} settimane il ${days}`,
         monthly: (day) => `Ogni mese il giorno ${day}`,
+        monthlyWeekday: (week, day, sunday) =>
+            `Ogni ${ordinal(week, sunday ? ['prima', 'seconda', 'terza', 'quarta', 'ultima'] : ['primo', 'secondo', 'terzo', 'quarto', 'ultimo'])} ${day} del mese`,
         yearly: (date) => `Ogni anno il ${date}`,
         billing: {
             WEEK: { one: 'ogni settimana', many: (n) => `ogni ${n} settimane` },
@@ -81,6 +93,10 @@ export function describeSchedule(pattern: SchedulePattern, locale = 'en'): strin
         }
         case 'MONTHLY':
             return phrases.monthly(p.dayOfMonth ?? 1);
+        case 'MONTHLY_WEEKDAY': {
+            const weekday = p.weekday ?? 'MON';
+            return phrases.monthlyWeekday(p.weekOfMonth ?? 1, weekdayName(weekday, intlLocale), weekday === 'SUN');
+        }
         case 'YEARLY':
             return phrases.yearly(
                 new Intl.DateTimeFormat(intlLocale, { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(Date.UTC(2000, (p.month ?? 1) - 1, p.day ?? 1))

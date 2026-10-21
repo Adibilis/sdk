@@ -29,6 +29,7 @@ describe('dynamicPeriodAmount (core fixture)', () => {
 
     it('runs every core case', () => {
         expect(cases.length).toBeGreaterThanOrEqual(7);
+        expect(cases.some((c) => c.pattern.kind === 'MONTHLY_WEEKDAY')).toBe(true);
     });
 
     it('rounds a number the way core rounds the same JSON number, where floats would not', () => {

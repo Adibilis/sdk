@@ -40,6 +40,36 @@ describe('describeSchedule', () => {
     });
 });
 
+describe('describeSchedule for a monthly weekday', () => {
+    const firstTuesday: SchedulePattern = { kind: 'MONTHLY_WEEKDAY', weekOfMonth: 1, weekday: 'TUE' };
+    const lastFriday: SchedulePattern = { kind: 'MONTHLY_WEEKDAY', weekOfMonth: -1, weekday: 'FRI' };
+    const thirdSunday: SchedulePattern = { kind: 'MONTHLY_WEEKDAY', weekOfMonth: 3, weekday: 'SUN' };
+
+    it.each([
+        ['en', ['Every first Tuesday of the month', 'Every last Friday of the month', 'Every third Sunday of the month']],
+        ['de', ['Jeden ersten Dienstag im Monat', 'Jeden letzten Freitag im Monat', 'Jeden dritten Sonntag im Monat']],
+        ['fr', ['Chaque premier mardi du mois', 'Chaque dernier vendredi du mois', 'Chaque troisième dimanche du mois']],
+        ['it', ['Ogni primo martedì del mese', 'Ogni ultimo venerdì del mese', 'Ogni terza domenica del mese']],
+    ] as const)('words it in %s', (locale, expected) => {
+        expect([firstTuesday, lastFriday, thirdSunday].map((pattern) => describeSchedule(pattern, locale))).toEqual(expected);
+    });
+
+    it('inflects every Italian ordinal for Sunday', () => {
+        expect([1, 2, 3, 4, -1].map((weekOfMonth) => describeSchedule({ kind: 'MONTHLY_WEEKDAY', weekOfMonth, weekday: 'SUN' }, 'it'))).toEqual([
+            'Ogni prima domenica del mese',
+            'Ogni seconda domenica del mese',
+            'Ogni terza domenica del mese',
+            'Ogni quarta domenica del mese',
+            'Ogni ultima domenica del mese',
+        ]);
+    });
+
+    it('words the second and fourth week', () => {
+        expect(describeSchedule({ kind: 'MONTHLY_WEEKDAY', weekOfMonth: 2, weekday: 'WED' }, 'de-CH')).toBe('Jeden zweiten Mittwoch im Monat');
+        expect(describeSchedule({ kind: 'MONTHLY_WEEKDAY', weekOfMonth: 4, weekday: 'SAT' }, 'fr')).toBe('Chaque quatrième samedi du mois');
+    });
+});
+
 describe('describeBilling', () => {
     it('words one and several intervals', () => {
         expect(describeBilling('WEEK', 1, 'de')).toBe('jede Woche');
