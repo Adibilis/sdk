@@ -32,6 +32,8 @@ export type {
     PublishedPropertyPageOptions,
     PublishedPropertyResponse,
 } from './property/property-client.js';
+export { subscribeNewsletter } from './shop/newsletter-client.js';
+export type { NewsletterSignupRequest } from './shop/newsletter-client.js';
 export { fetchShopProduct, fetchShopProducts } from './shop/product-client.js';
 export type { ProductPriceResponse, ShopProductImageResponse, ShopProductResponse } from './shop/product-client.js';
 
