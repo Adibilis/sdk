@@ -62,6 +62,7 @@ export { subscriptionCheckoutRefusalOf } from './subscription/checkout-refusal.j
 export type { SubscriptionCheckoutRefusal } from './subscription/checkout-refusal.js';
 
 export type {
+    CustomerInvoicePdf,
     CustomerPage,
     CustomerPaymentMethodSetup,
     CustomerPaymentMethodUpdate,

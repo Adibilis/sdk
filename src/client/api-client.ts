@@ -14,6 +14,11 @@ export interface AdibilisClient {
     post<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
     patch<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
     delete<T>(path: string, init?: RequestInit): Promise<T>;
+    /**
+     * A GET whose answer is a file: core's `Response` as it arrived, its body not read yet, when core answers 2xx. Any other status
+     * rejects with an `AdibilisApiError`, exactly like `get`.
+     */
+    download(path: string, init?: RequestInit): Promise<Response>;
 }
 
 /**
@@ -30,7 +35,7 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
     const baseUrl = config.baseUrl.replace(/\/+$/, '');
     const doFetch = config.fetch ?? globalThis.fetch;
 
-    async function request<T>(path: string, init: RequestInit): Promise<T> {
+    async function send(path: string, init: RequestInit): Promise<Response> {
         const response = await doFetch(`${baseUrl}${path}`, {
             ...init,
             headers: {
@@ -40,12 +45,15 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
             },
         });
 
-        const body = await parseBody(response);
         if (!response.ok) {
             // Only status, body and path — see AdibilisApiError on why the key never travels along.
-            throw new AdibilisApiError(response.status, body, path);
+            throw new AdibilisApiError(response.status, await parseBody(response), path);
         }
-        return body as T;
+        return response;
+    }
+
+    async function request<T>(path: string, init: RequestInit): Promise<T> {
+        return (await parseBody(await send(path, init))) as T;
     }
 
     return {
@@ -65,6 +73,7 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
                 body: JSON.stringify(body),
             }),
         delete: (path, init) => request(path, { ...init, method: 'DELETE' }),
+        download: (path, init) => send(path, { ...init, method: 'GET' }),
     };
 }
 

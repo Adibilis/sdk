@@ -17,6 +17,7 @@ describe('customerRefusalOf', () => {
         ['a closed shop', listed(404, 'SHOP_MODULE_DISABLED', ['Shop module disabled']), { code: 'SHOP_MODULE_DISABLED' }],
         ["another customer's subscription", listed(404, 'SUBSCRIPTION_NOT_FOUND'), { code: 'SUBSCRIPTION_NOT_FOUND' }],
         ['an unknown delivery', listed(404, 'SUBSCRIPTION_DELIVERY_NOT_FOUND'), { code: 'SUBSCRIPTION_DELIVERY_NOT_FOUND' }],
+        ["another customer's invoice", listed(404, 'INVOICE_NOT_FOUND'), { code: 'INVOICE_NOT_FOUND' }],
         ['an unlisted plan', listed(404, 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND'), { code: 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND' }],
         [
             'an action the state forbids, with its reason',

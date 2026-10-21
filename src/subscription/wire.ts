@@ -1,5 +1,6 @@
 // Core's generated subscription, customer-session and portal shapes, copied from its ajtg zod output (checkout: core
-// feat/subscriptions-checkout 3b3ce4e7c; session and portal: core feat/subscriptions-portal 0ae1fadea) because no
+// feat/subscriptions-checkout 3b3ce4e7c; session and portal: core feat/subscriptions-portal 0ae1fadea;
+// CustomerTransactionResponse: core fix/customer-portal-link-and-invoices 6712edb1a) because no
 // @adbls/api-types release carries them yet. The commit that raises that dependency to the core release with Plans 3–8
 // replaces this file with re-exports from @adbls/api-types; keep it a verbatim copy until then.
 import { OrderIngestLineItemRequestModel, OrderIngestPersonRequestModel } from '@adbls/api-types';
@@ -257,8 +258,8 @@ export interface CustomerTransactionResponse {
     periodEnd?: string;
     amount: number;
     currency: string;
-    hostedInvoiceUrl?: string;
-    invoicePdfUrl?: string;
+    invoiceId?: number;
+    invoiceNumber?: string;
 }
 
 export interface CustomerSubscriptionResponse {

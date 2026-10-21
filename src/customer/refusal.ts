@@ -24,7 +24,7 @@ const ACTION_REASONS: readonly SubscriptionActionRefusalReason[] = [
 export type CustomerRefusal =
     /** 401: the session expired, was revoked, or its person is no longer a customer. Clear the cookie and sign in again. */
     | { code: 'CUSTOMER_SESSION_INVALID' }
-    /** 401: the mailed link expired, was replaced by a newer one before it was used, or never existed. Offer a new link. */
+    /** 401: the mailed link was used, expired, replaced by a newer one or never existed. Offer a new link. */
     | { code: 'CUSTOMER_LOGIN_TOKEN_INVALID' }
     /** 404: core's shop module is off — the portal is closed. */
     | { code: 'SHOP_MODULE_DISABLED' }
@@ -32,6 +32,8 @@ export type CustomerRefusal =
     | { code: 'SUBSCRIPTION_NOT_FOUND' }
     /** 404: no such delivery on this subscription. */
     | { code: 'SUBSCRIPTION_DELIVERY_NOT_FOUND' }
+    /** 404: no such invoice among the customer's transactions (another customer's id answers the same). */
+    | { code: 'INVOICE_NOT_FOUND' }
     /** 404: the plan is not listed for this subscription's currency (any more). Re-read the catalog. */
     | { code: 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND' }
     /** 409: not in this state; `reason` says which (`null` for a reason this SDK does not know yet). Re-read the subscription. */
@@ -81,7 +83,13 @@ const LISTED: Record<number, readonly ListedCode[]> = {
         'PAGE_OUT_OF_BOUNDS',
     ],
     401: ['CUSTOMER_SESSION_INVALID', 'CUSTOMER_LOGIN_TOKEN_INVALID'],
-    404: ['SHOP_MODULE_DISABLED', 'SUBSCRIPTION_NOT_FOUND', 'SUBSCRIPTION_DELIVERY_NOT_FOUND', 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND'],
+    404: [
+        'SHOP_MODULE_DISABLED',
+        'SUBSCRIPTION_NOT_FOUND',
+        'SUBSCRIPTION_DELIVERY_NOT_FOUND',
+        'INVOICE_NOT_FOUND',
+        'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND',
+    ],
     409: ['SUBSCRIPTION_DELIVERY_NOT_SKIPPABLE', 'SUBSCRIPTION_PAYMENT_METHOD_UNAVAILABLE', 'CONCURRENT_UPDATE_CONFLICT'],
     429: ['TOO_MANY_REQUESTS'],
 };

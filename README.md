@@ -306,7 +306,7 @@ try {
     // then 303 to /account
 } catch (error) {
     if (customerRefusalOf(error)?.code !== 'CUSTOMER_LOGIN_TOKEN_INVALID') throw error;
-    // "This link has expired", with the form for a new one
+    // "This link was used or has expired", with the form for a new one
 }
 
 // 4. Every account page and handler (a raw `Cookie` header string works too; with duplicates the last one wins, like Next's store)
@@ -337,22 +337,24 @@ try {
 }
 ```
 
-**The link signs in by itself, through a POST, never from the GET of the link.** Core accepts a link
-every time it is used until it expires, each time with a new session. Mail scanners (Outlook Safe
-Links and others) open every link in a mail before the customer does, some with JavaScript running;
-such a scanner signs itself in, in its own cookie jar, and the link still works for the customer. So
-the page the link leads to exchanges the token as soon as it loads, without a button to click. Two
-shapes are allowed, and only these:
+**The link works once, and is spent by a POST from the page, never by the GET of the link.** The
+first exchange opens a session; any later one — a reload, a second click, the link opened again
+after a logout — answers 401 `CUSTOMER_LOGIN_TOKEN_INVALID`. Mail scanners (Outlook Safe Links and
+others) open every link in a mail before the customer does: a callback that exchanged the token while
+answering the GET would spend every link on the scanner. The page the link leads to may sign in
+without a click, by POSTing as soon as it loads; a scanner that runs the page's script then uses the
+link up, and the customer finds it spent and asks for a new one. A "Sign in" button that POSTs costs
+one click, and scanners do not click it. Two shapes are allowed, and only these:
 
-- `GET /account/callback?token=…` renders a page that POSTs the token as soon as it loads (shape 1;
-  its POST handler must be same-origin only, see below); or
+- `GET /account/callback?token=…` renders a page that POSTs the token, as soon as it loads or on a
+  click (shape 1; its POST handler must be same-origin only, see below); or
 - (shape 2) the template's flow: the GET callback route does **not** call core. It stores the token in a
   short `httpOnly` cookie, `adbl_login` (900 s, `Secure`, `SameSite=Strict`, `Path=/api/account/session`),
   and answers 303 to `/account/continue` with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`,
   so the token leaves the address bar and the browser history at once. The continue page POSTs to
-  `/api/account/session` as soon as it loads; that handler reads the token from the cookie, calls
-  `exchangeLoginToken`, deletes the cookie, sets `__Host-adbl_customer` and the page goes on to the
-  account.
+  `/api/account/session`, as soon as it loads or on a click; that handler reads the token from the
+  cookie, calls `exchangeLoginToken`, deletes the cookie, sets `__Host-adbl_customer` and the page
+  goes on to the account.
   `Strict` works because the cookie is needed only on that same-site form POST; the cross-site
   navigation from the mail client does not need it. The handoff cookie keeps its name: it is not
   `__Host-`, because its `Path` is not `/`.
@@ -381,9 +383,10 @@ account. Show the signed-in address on every account page, so a customer notices
 card or an address.
 
 Either way the exchange is a POST from the page, never a call to core while answering the GET, and the
-GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. A link works for 15 minutes,
-as often as it is opened; a newer link replaces one that was not used yet, and one already used keeps
-working until it expires.
+GET answers `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. Redirecting before the POST
+is fine: a redirect does not spend the link, a call to core does. A link works once, for 15 minutes;
+a newer link replaces the unused older ones. On `CUSTOMER_LOGIN_TOKEN_INVALID` show the form for a
+new link.
 
 **The session stays on the server.** `exchangeLoginToken` hands the session over only as `cookie`:
 `__Host-adbl_customer`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` (your `/api/account/*` handlers
@@ -420,13 +423,61 @@ the `paymentMethod` it reports, not an assumption.
 
 Open the SetupIntent when the customer clicks "Change card", not on page load.
 
+**Invoices.** Each `listTransactions()` row carries core's own sales invoice for the charge:
+`invoiceId` and `invoiceNumber`, both `null` while core has none for the row — then show no
+download. (Rows no longer carry Stripe's `hostedInvoiceUrl` / `invoicePdfUrl`; needs the core
+release with `GET /api/customer/invoice/{id}/pdf`.) The PDF has no public URL: a route of the shop
+fetches it with `customer.invoicePdf(invoiceId)` and streams it on. The account page links to that
+route (`<a href={`/api/account/invoice/${row.invoiceId}`}>`, plus `download` to save instead of
+open):
+
+```typescript
+// app/api/account/invoice/[id]/route.ts
+import { cookies } from 'next/headers';
+import { customerFromCookies, customerRefusalOf, expiredCustomerSessionCookie } from '@adbls/sdk/server';
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const id = Number((await params).id);
+    const customer = customerFromCookies(core, await cookies(), { clientIp: visitorIpOf(request) });
+    if (!customer) return Response.redirect(new URL('/account/login', request.url), 303);
+    if (!Number.isSafeInteger(id) || id < 1) return new Response(null, { status: 404 });
+    try {
+        const pdf = await customer.invoicePdf(id);
+        return new Response(pdf.body, { headers: pdf.headers }); // inline, <invoiceNumber>.pdf, no-store
+    } catch (error) {
+        switch (customerRefusalOf(error)?.code) {
+            case 'INVOICE_NOT_FOUND':
+                return new Response(null, { status: 404 });
+            case 'TOO_MANY_REQUESTS':
+                return new Response(null, { status: 429 });
+            case 'CUSTOMER_SESSION_INVALID':
+                return new Response(null, {
+                    status: 303,
+                    headers: { Location: '/account/login', 'Set-Cookie': expiredCustomerSessionCookie().header },
+                });
+            default:
+                throw error;
+        }
+    }
+}
+```
+
+`invoicePdf` resolves with `body` (the PDF as core streams it; it can be read once), `contentType`
+(`application/pdf`), `filename` (`<invoiceNumber>.pdf`) and `headers` for the browser: core's
+`Content-Disposition` (inline), `Cache-Control: private, no-store`, `Content-Security-Policy:
+default-src 'none'` and `X-Content-Type-Options: nosniff`. Never cache the PDF or hand it out on a
+URL without the session. Core answers 404 `INVOICE_NOT_FOUND` for every invoice that is not in the
+signed-in customer's own transactions — another customer's, an unknown id — and 429 beyond 10 PDFs
+per visitor a minute (its own budget). An answer that is not a PDF rejects with an `Error`, so the
+route never passes anything else on under the shop's origin.
+
 **What core holds you to:**
 
 - **`clientIp` on every call.** `requestLoginLink`, `exchangeLoginToken` and `customerFromCookies`
   all take the visitor's address, with the checkout's rule: an IPv4 or IPv6 literal, IPv4-mapped
   addresses sent as IPv4. Core throttles per visitor with it; a missing or malformed one rejects
   locally before anything is sent.
-- **Budgets.** Per visitor a minute: 60 reads, 10 changes, 5 card calls, 5 sign-in links, 30
+- **Budgets.** Per visitor a minute: 60 reads, 10 changes, 10 invoice PDFs, 5 card calls, 5 sign-in links, 30
   sign-ins and logouts together; 10 SetupIntents per customer an hour; 5 sign-in mails per address
   an hour (further requests still answer 202, nothing is sent). Every change answers the
   subscription as it is now — render that instead of reading it again.
@@ -469,7 +520,7 @@ Open the SetupIntent when the customer clicks "Change card", not on page load.
   at the same billing interval. Core cannot know your prices and charges what your server sends:
   build `lines` on the server from your own price list and the stored configuration, never from a
   price, fee or amount the browser posted.
-- **Ids are core's.** Another customer's subscription or delivery answers 404, exactly like a
+- **Ids are core's.** Another customer's subscription, delivery or invoice answers 404, exactly like a
   missing one; responses never carry a contact id.
 
 Every call checks its input locally first — the generated schema, positive ids, a well-formed
@@ -752,6 +803,11 @@ the customer session and the portal; an older core answers their endpoints with 
 generated ones; the release that raises the dependency replaces it with re-exports, and nothing that
 imports from the SDK changes.
 
+`invoicePdf` and the transactions' `invoiceId` / `invoiceNumber` need the core release after 1.9.7
+that serves `GET /api/customer/invoice/{id}/pdf`. An older core answers that path with 404 and still
+sends Stripe's `hostedInvoiceUrl` / `invoicePdfUrl` on the rows instead, which this SDK no longer
+types: upgrade core and the SDK together.
+
 ## Two credentials, never confuse them
 
 - **Publishing** — no token at all: GitHub Actions publishes via npm trusted publishing (OIDC).
@@ -780,10 +836,11 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/shop/subscription-plan/{id}` | 404 unless that plan is listed |
 | `POST /api/subscription/checkout` | opens a subscription in core and at Stripe (`startSubscriptionCheckout`), or with `preview: true` only prices it (`previewSubscriptionCheckout`); 429 beyond 10 per visitor (`X-Shop-Client-Ip`) or 300 per shop server a minute |
 | `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
-| `POST /api/customer/login-link` | mails a customer a sign-in link, valid 15 minutes (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
-| `POST /api/customer/session` | exchanges the link's token for a 30-day session (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID`; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
+| `POST /api/customer/login-link` | mails a customer a one-time sign-in link, valid 15 minutes (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
+| `POST /api/customer/session` | exchanges the link's token for a 30-day session, once per link (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for a used, expired or unknown link; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
 | `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
 | `GET /api/customer/subscription[/{id}]`, `GET /api/customer/transaction` | the signed-in customer's subscriptions and payments (`X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `GET /api/customer/invoice/{id}/pdf` | the PDF of an invoice in the signed-in customer's transactions (`invoicePdf`); 404 `INVOICE_NOT_FOUND` for any other; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `POST\|PATCH /api/customer/subscription/{id}/payment-method` | the card change (`beginPaymentMethodUpdate`, `confirmPaymentMethod`); 429 beyond 5 per visitor or 120 per shop server a minute, and beyond 10 SetupIntents per customer an hour |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |

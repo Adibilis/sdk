@@ -186,8 +186,30 @@ export interface CustomerTransaction {
     periodEnd: string | null;
     amount: number;
     currency: string;
-    hostedInvoiceUrl: string | null;
-    invoicePdfUrl: string | null;
+    /**
+     * Core's own sales invoice for this charge: pass it to `invoicePdf`. `null` while core has none for the row (or it is a draft
+     * or in the trash) — then show no download.
+     */
+    invoiceId: number | null;
+    /** The invoice's number, as printed on it and in the PDF's file name; `null` exactly when `invoiceId` is. */
+    invoiceNumber: string | null;
+}
+
+/**
+ * One of the customer's invoices as a PDF, for a route of the shop to hand to the browser:
+ * `new Response(pdf.body, { headers: pdf.headers })`.
+ */
+export interface CustomerInvoicePdf {
+    /** The PDF as core streams it. It can be read once: pass it on, or `await new Response(pdf.body).arrayBuffer()` for the bytes. */
+    body: ReadableStream<Uint8Array>;
+    contentType: 'application/pdf';
+    /** `<invoiceNumber>.pdf`, from core's `Content-Disposition`. */
+    filename: string;
+    /**
+     * The headers to answer the browser with: `Content-Type`, core's `Content-Disposition` (inline, with the file name),
+     * `Cache-Control: private, no-store`, `Content-Security-Policy: default-src 'none'` and `X-Content-Type-Options: nosniff`.
+     */
+    headers: Record<string, string>;
 }
 
 type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
