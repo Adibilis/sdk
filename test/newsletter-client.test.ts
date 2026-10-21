@@ -66,10 +66,13 @@ describe('subscribeNewsletter', () => {
         ['a blank last name', { lastname: '' }],
         ['an address that is none', { email: 'jane' }],
         ['consent other than true', { consent: false }],
+        ['a regional locale as the language', { language: 'de-CH' }],
+        ['an upper-case language', { language: 'DE' }],
+        ['a language core does not write', { language: 'es' }],
     ])('refuses %s before any request', async (_name, change) => {
         const client = mockClient();
 
-        await expect(subscribeNewsletter(client, { ...signup, ...change } as NewsletterSignupRequest, visitor)).rejects.toBeInstanceOf(ZodError);
+        await expect(subscribeNewsletter(client, { ...signup, ...change } as unknown as NewsletterSignupRequest, visitor)).rejects.toBeInstanceOf(ZodError);
         expect(client.post).not.toHaveBeenCalled();
     });
 
@@ -95,6 +98,26 @@ describe('subscribeNewsletter', () => {
 
         expect(error).toBeInstanceOf(AdibilisApiError);
         expect(error).toMatchObject({ status: 400, body, path: '/api/shop/newsletter' });
+    });
+
+    it.each(['de', 'fr', 'it', 'en'] as const)('sends the language %s as given', async (language) => {
+        const client = mockClient();
+
+        await subscribeNewsletter(client, { ...signup, language }, visitor);
+
+        expect(client.post.mock.calls[0][1]).toMatchObject({ language });
+    });
+
+    it('rejects a 503 NEWSLETTER_NOT_STORED with an AdibilisApiError, so the site can ask to try again later', async () => {
+        const body = { code: 'NEWSLETTER_NOT_STORED' };
+        const { client } = coreAnswering(
+            new Response(JSON.stringify(body), { status: 503, headers: { 'content-type': 'application/json', 'retry-after': '60' } })
+        );
+
+        const error = await subscribeNewsletter(client, signup, visitor).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(AdibilisApiError);
+        expect(error).toMatchObject({ status: 503, body, path: '/api/shop/newsletter' });
     });
 
     it.each([429, 401, 403])('rejects a %i with an AdibilisApiError of that status', async (status) => {

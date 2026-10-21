@@ -3,6 +3,11 @@ import type { AdibilisClient } from '../client/api-client.js';
 import { shopCallHeaders } from '../subscription/checkout-client.js';
 import type { ShopCallOptions } from '../subscription/checkout-client.js';
 
+/** The languages core accepts for a sign-up: lower-case, exactly these — `de-CH` or `DE` is a 400. */
+export type NewsletterLanguage = 'de' | 'fr' | 'it' | 'en';
+
+const NEWSLETTER_LANGUAGES = ['de', 'fr', 'it', 'en'] as const satisfies readonly NewsletterLanguage[];
+
 export interface NewsletterSignupRequest {
     firstname: string;
     lastname: string;
@@ -11,8 +16,8 @@ export interface NewsletterSignupRequest {
     consent: true;
     /** The honeypot input's raw value — a person leaves it empty. Forward it verbatim; never set it yourself. */
     website?: string;
-    /** The visitor's language, forwarded as given; core decides what it accepts. */
-    language?: string;
+    /** The visitor's language, sent as given — map a locale like `de-CH` to `de` yourself. */
+    language?: NewsletterLanguage;
 }
 
 // Only what keeps an obviously incomplete sign-up from leaving the process; every other rule is core's.
@@ -22,7 +27,7 @@ const SignupPayloadModel = z.object({
     email: z.string().trim().email(),
     consent: z.literal(true, 'consent must be true: collect it before submitting'),
     website: z.string().optional(),
-    language: z.string().optional(),
+    language: z.enum(NEWSLETTER_LANGUAGES).optional(),
 });
 
 /**
@@ -34,9 +39,12 @@ const SignupPayloadModel = z.object({
  * skips every local check and is sent as-is, so a bot gets core's silent 202 rather than a client-side rejection that would
  * reveal the trap.
  *
- * Refused (each an `AdibilisApiError`; read its `status`): 400 validation, with the violations in `err.body`; 429 beyond core's
- * per-visitor limit; 401/403 a missing, wrong or under-privileged WEBSITE key. A blank name, an address that is none, a
- * `consent` other than `true` or a `clientIp` that is no IP literal is a `ZodError` here, before any request.
+ * Refused (each an `AdibilisApiError`; read its `status`): 400 validation, with the violations in `err.body`
+ * (`NEWSLETTER_CONSENT_REQUIRED` for `consent: false`); 429 `TOO_MANY_REQUESTS` beyond 5 sign-ups a minute per visitor or 120
+ * per shop server; 503 `NEWSLETTER_NOT_STORED` (with `Retry-After: 60`) when core could not store the sign-up — try again
+ * later; 401/403 a missing, wrong or under-privileged WEBSITE key. A blank name, an address that is none, a `consent` other
+ * than `true`, a `language` other than `de`, `fr`, `it` or `en`, or a `clientIp` that is no IP literal is a `ZodError` here,
+ * before any request.
  */
 export async function subscribeNewsletter(client: AdibilisClient, request: NewsletterSignupRequest, options: ShopCallOptions): Promise<void> {
     const headers = shopCallHeaders(options);

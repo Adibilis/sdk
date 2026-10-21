@@ -583,15 +583,16 @@ await subscribeNewsletter(core, {
     firstname, lastname, email,            // required
     consent: true,                         // must be `true` — collect consent before submitting
     website,                               // the honeypot input's raw value — see below
-    language: 'de',                        // optional, forwarded as given
+    language: 'de',                        // optional: de, fr, it or en — lower-case, exactly these
 }, { clientIp });                          // the visitor's IP, from your request
 ```
 
 | Answer | Meaning |
 |---|---|
 | `202` | **accepted** — the call resolves with nothing, for a new address, a known one and one already subscribed alike |
-| `400` | validation — core's violations are in `err.body`. Not retryable |
-| `429` | rate limited, per visitor (`X-Shop-Client-Ip`) |
+| `400` | validation — core's violations are in `err.body`: `NEWSLETTER_CONSENT_REQUIRED` for `consent: false`, `NotNull` on `consent` when it is missing, the Bean Validation codes for the other fields (a `language` like `de-CH` or `DE` included). Not retryable |
+| `429` | `TOO_MANY_REQUESTS` — beyond 5 sign-ups a minute per visitor (`X-Shop-Client-Ip`), or 120 a minute per shop server |
+| `503` | `NEWSLETTER_NOT_STORED`, with `Retry-After: 60` — core could not store the sign-up (e.g. its Newsletter group is missing until core restarts with the shop module on). Ask the visitor to **try again later** |
 | `401` / `403` | the WEBSITE key is missing, wrong or not allowed to sign people up |
 
 Every non-2xx is an `AdibilisApiError`; read its `status`.
@@ -605,8 +606,10 @@ Every non-2xx is an `AdibilisApiError`; read its `status`.
 - **`clientIp` on every call**, as for `requestLoginLink`: core rate-limits per visitor with it. An
   address that is no IPv4 or IPv6 literal (a host name, a forwarded-for list) is a `ZodError` before
   any request.
-- A blank first or last name, an `email` that is no address or a `consent` other than `true` is a
-  `ZodError` before any request; every other rule is core's.
+- **`language` is not a locale.** Core takes `de`, `fr`, `it` or `en` and answers 400 for anything
+  else; the SDK does not normalise, so map `de-CH` to `de` yourself.
+- A blank first or last name, an `email` that is no address, a `consent` other than `true` or a
+  `language` outside those four is a `ZodError` before any request; every other rule is core's.
 
 ## Properties
 
@@ -875,7 +878,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/shop/subscription-plan/{id}` | 404 unless that plan is listed |
 | `POST /api/subscription/checkout` | opens a subscription in core and at Stripe (`startSubscriptionCheckout`), or with `preview: true` only prices it (`previewSubscriptionCheckout`); 429 beyond 10 per visitor (`X-Shop-Client-Ip`) or 300 per shop server a minute |
 | `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
-| `POST /api/shop/newsletter` | signs a visitor up for the newsletter (`subscribeNewsletter`); always 202 for an accepted sign-up (new, known or already subscribed address, honeypot hit); 400 = validation; 429 per visitor (`X-Shop-Client-Ip`) |
+| `POST /api/shop/newsletter` | signs a visitor up for the newsletter (`subscribeNewsletter`); always 202 for an accepted sign-up (new, known or already subscribed address, honeypot hit); 400 = validation; 429 beyond 5 per visitor (`X-Shop-Client-Ip`) or 120 per shop server a minute; 503 `NEWSLETTER_NOT_STORED` (`Retry-After: 60`) = not stored, try again later |
 | `POST /api/customer/login-link` | mails a customer a one-time sign-in link, valid 15 minutes (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
 | `POST /api/customer/session` | exchanges the link's token for a 30-day session, once per link (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for a used, expired or unknown link; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
 | `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
