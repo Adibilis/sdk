@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { confirmMethodOf, isDynamicEntry } from '../src/subscription/types';
 import type { ShopSubscriptionEntry } from '../src/subscription/types';
-import { SubscriptionCheckoutRequestModel } from '../src/subscription/wire';
+import { SchedulePatternModel, SubscriptionCheckoutRequestModel } from '../src/subscription/wire';
 
 const tueFri = { kind: 'WEEKLY', weekdays: ['TUE', 'FRI'], everyNWeeks: 1 } as const;
 
@@ -93,5 +93,20 @@ describe('SubscriptionCheckoutRequestModel (copy of core generator output)', () 
                 returnUrl: 'https://shop.example/r',
             }).success
         ).toBe(false);
+    });
+});
+
+describe('SchedulePatternModel', () => {
+    it('takes a monthly-weekday pattern, last week included', () => {
+        expect(SchedulePatternModel.safeParse({ kind: 'MONTHLY_WEEKDAY', weekOfMonth: 1, weekday: 'TUE' }).success).toBe(true);
+        expect(SchedulePatternModel.safeParse({ kind: 'MONTHLY_WEEKDAY', weekOfMonth: -1, weekday: 'SUN' }).success).toBe(true);
+    });
+
+    it.each([0, 5, -2, 1.5])('refuses week of month %s', (weekOfMonth) => {
+        expect(SchedulePatternModel.safeParse({ kind: 'MONTHLY_WEEKDAY', weekOfMonth, weekday: 'TUE' }).success).toBe(false);
+    });
+
+    it('refuses an unknown weekday', () => {
+        expect(SchedulePatternModel.safeParse({ kind: 'MONTHLY_WEEKDAY', weekOfMonth: 1, weekday: 'tue' }).success).toBe(false);
     });
 });

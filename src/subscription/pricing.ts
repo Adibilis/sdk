@@ -12,7 +12,7 @@ export interface DynamicPrice {
 
 /**
  * Twin of core's `DynamicSubscriptionPricer`: billing follows the cadence. Weekly bills every `everyNWeeks` weeks at
- * `unitAmount × chosen weekdays`; monthly and yearly bill `unitAmount` once per month or year. `unitAmount` is rounded
+ * `unitAmount × chosen weekdays`; monthly (either kind) and yearly bill `unitAmount` once per month or year. `unitAmount` is rounded
  * half-up to cents first. This is the price before VAT is added on a NETTO cart and before Stripe Tax — the charge itself is
  * what `previewSubscriptionCheckout` answers.
  */
@@ -25,6 +25,7 @@ export function dynamicPeriodAmount(unitAmount: number | string, pattern: Schedu
             return { interval: 'WEEK', intervalCount: p.everyNWeeks, periodAmount: formatDecimal(multiply(unit, parseDecimal(p.weekdays.length))) };
         }
         case 'MONTHLY':
+        case 'MONTHLY_WEEKDAY':
             return { interval: 'MONTH', intervalCount: 1, periodAmount: formatDecimal(unit) };
         case 'YEARLY':
             return { interval: 'YEAR', intervalCount: 1, periodAmount: formatDecimal(unit) };
