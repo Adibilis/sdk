@@ -69,6 +69,16 @@ describe('subscriptionCheckoutRefusalOf', () => {
         ['the new amount', listed(409, 'SUBSCRIPTION_AMOUNT_CHANGED', ['51.30']), { code: 'SUBSCRIPTION_AMOUNT_CHANGED', amount: 51.3 }],
         ['changed terms', listed(409, 'SUBSCRIPTION_CHECKOUT_CHANGED'), { code: 'SUBSCRIPTION_CHECKOUT_CHANGED' }],
         ['an expired checkout', listed(409, 'SUBSCRIPTION_CHECKOUT_EXPIRED'), { code: 'SUBSCRIPTION_CHECKOUT_EXPIRED' }],
+        [
+            'a plan out of stock for the country',
+            listed(409, 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ['7', 'DE']),
+            { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', planId: 7, country: 'DE' },
+        ],
+        [
+            'a plan out of stock without a country',
+            listed(409, 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ['7', '']),
+            { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', planId: 7, country: null },
+        ],
         ['an already active subscription', listed(400, 'SUBSCRIPTION_ALREADY_ACTIVE'), { code: 'SUBSCRIPTION_ALREADY_ACTIVE' }],
         ['the rate limit', listed(429, 'TOO_MANY_REQUESTS'), { code: 'TOO_MANY_REQUESTS' }],
         ['a plan that is not listed', listed(404, 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND'), { code: 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND' }],
@@ -89,6 +99,8 @@ describe('subscriptionCheckoutRefusalOf', () => {
 
     it.each([
         ['a lock conflict', listed(409, 'CONCURRENT_UPDATE_CONFLICT')],
+        ['a plan refusal without a plan id', listed(409, 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ['x', 'DE'])],
+        ['a plan refusal on another status', listed(400, 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ['7', 'DE'])],
         ['an amount change without its amount', listed(409, 'SUBSCRIPTION_AMOUNT_CHANGED')],
         ['an amount change on another status', listed(400, 'SUBSCRIPTION_AMOUNT_CHANGED', ['51.30'])],
         ['another violation', apiError(400, { violations: [{ field: 'schedule', code: 'SUBSCRIPTION_SCHEDULE_NOT_ALLOWED', params: {} }] })],

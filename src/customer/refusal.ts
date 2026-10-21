@@ -1,4 +1,5 @@
 import { AdibilisApiError } from '../client/errors.js';
+import { planUnavailableOf } from '../subscription/checkout-refusal.js';
 import { SubscriptionUpdateError } from './customer-client.js';
 
 /** Why core refused a subscription action: its state (`CANCELLING` = cancelled at period end, `DYNAMIC` = no plan to change). */
@@ -44,6 +45,8 @@ export type CustomerRefusal =
     | { code: 'SUBSCRIPTION_PAYMENT_METHOD_UNAVAILABLE' }
     /** 409: Stripe has the change, core is still writing it: re-read the subscription in a moment. Never repeat the change. */
     | { code: 'CONCURRENT_UPDATE_CONFLICT' }
+    /** 409: the new plan adds products the delivery country's distributor has run out of ("stop at 0"); nothing changed. */
+    | { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE'; planId: number; country: string | null }
     /** 400: the change would alter how often the subscription is billed; cancel and subscribe anew instead. */
     | { code: 'SUBSCRIPTION_BILLING_INTERVAL_CHANGE' }
     /** 400: the schedule is not one the plan (or the dynamic settings) offers. */
@@ -69,7 +72,11 @@ export type CustomerRefusal =
 
 type ListedCode = Exclude<
     CustomerRefusal['code'],
-    'SUBSCRIPTION_ACTION_NOT_ALLOWED' | 'SUBSCRIPTION_SCHEDULE_NOT_ALLOWED' | 'SUBSCRIPTION_CONFIGURATION_INVALID' | 'SUBSCRIPTION_PAUSE_DATE_INVALID'
+    | 'SUBSCRIPTION_ACTION_NOT_ALLOWED'
+    | 'SUBSCRIPTION_SCHEDULE_NOT_ALLOWED'
+    | 'SUBSCRIPTION_CONFIGURATION_INVALID'
+    | 'SUBSCRIPTION_PAUSE_DATE_INVALID'
+    | 'SUBSCRIPTION_PLAN_NOT_AVAILABLE'
 >;
 
 const LISTED: Record<number, readonly ListedCode[]> = {
@@ -111,6 +118,10 @@ export function customerRefusalOf(error: unknown): CustomerRefusal | null {
     if (cause.status === 409 && 'SUBSCRIPTION_ACTION_NOT_ALLOWED' in errorList) {
         const argument = (errorList['SUBSCRIPTION_ACTION_NOT_ALLOWED'] as unknown[] | undefined)?.[0];
         return { code: 'SUBSCRIPTION_ACTION_NOT_ALLOWED', reason: ACTION_REASONS.find((reason) => reason === argument) ?? null };
+    }
+    if (cause.status === 409) {
+        const unavailable = planUnavailableOf(errorList);
+        if (unavailable !== null) return { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ...unavailable };
     }
     if (cause.status !== 400) return null;
     const violations = Array.isArray(body?.violations) ? (body.violations as Violation[]) : [];

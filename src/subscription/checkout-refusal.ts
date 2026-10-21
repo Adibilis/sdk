@@ -14,6 +14,11 @@ export type SubscriptionCheckoutRefusal =
     | { code: 'SUBSCRIPTION_CHECKOUT_CHANGED' }
     /** The unpaid checkout behind this reference was dropped (by Stripe, or cancelled by core) and can never be paid. Start over with a NEW `cartRef`. */
     | { code: 'SUBSCRIPTION_CHECKOUT_EXPIRED' }
+    /**
+     * 409: the plan's first delivery cannot be served to this delivery country (a product core sells "stop at 0" is out of stock
+     * there); nothing was created, the preview refuses the same way. `country` is null when core had no country to route by.
+     */
+    | { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE'; planId: number; country: string | null }
     /** This reference became a subscription, so it went through: show the success page, do not charge again. */
     | { code: 'SUBSCRIPTION_ALREADY_ACTIVE' }
     /** The chosen start date is not accepted; `earliest` is the first date core would take. */
@@ -32,6 +37,14 @@ export type SubscriptionCheckoutRefusal =
 
 type Violation = { code?: unknown; params?: { earliest?: unknown } };
 
+/** Reads core's `SUBSCRIPTION_PLAN_NOT_AVAILABLE` `[planId, country or ""]`, or `null` when it is absent or malformed. */
+export function planUnavailableOf(errorList: Record<string, unknown>): { planId: number; country: string | null } | null {
+    const params = errorList['SUBSCRIPTION_PLAN_NOT_AVAILABLE'];
+    if (!Array.isArray(params) || typeof params[0] !== 'string' || !/^\d+$/.test(params[0])) return null;
+    const country = typeof params[1] === 'string' && params[1] !== '' ? params[1] : null;
+    return { planId: Number(params[0]), country };
+}
+
 /** Core's refusal of a subscription checkout in a form a shop can act on, or `null` for any other error. */
 export function subscriptionCheckoutRefusalOf(error: unknown): SubscriptionCheckoutRefusal | null {
     if (!(error instanceof AdibilisApiError)) return null;
@@ -46,6 +59,8 @@ export function subscriptionCheckoutRefusalOf(error: unknown): SubscriptionCheck
         }
         if ('SUBSCRIPTION_CHECKOUT_CHANGED' in errorList) return { code: 'SUBSCRIPTION_CHECKOUT_CHANGED' };
         if ('SUBSCRIPTION_CHECKOUT_EXPIRED' in errorList) return { code: 'SUBSCRIPTION_CHECKOUT_EXPIRED' };
+        const unavailable = planUnavailableOf(errorList);
+        if (unavailable !== null) return { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ...unavailable };
     }
     if (error.status !== 400) return null;
     if ('SUBSCRIPTION_ALREADY_ACTIVE' in errorList) return { code: 'SUBSCRIPTION_ALREADY_ACTIVE' };

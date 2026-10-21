@@ -32,6 +32,11 @@ describe('customerRefusalOf', () => {
         ['a delivery too close to skip', listed(409, 'SUBSCRIPTION_DELIVERY_NOT_SKIPPABLE'), { code: 'SUBSCRIPTION_DELIVERY_NOT_SKIPPABLE' }],
         ['no card to change', listed(409, 'SUBSCRIPTION_PAYMENT_METHOD_UNAVAILABLE'), { code: 'SUBSCRIPTION_PAYMENT_METHOD_UNAVAILABLE' }],
         ['a lost write race', listed(409, 'CONCURRENT_UPDATE_CONFLICT'), { code: 'CONCURRENT_UPDATE_CONFLICT' }],
+        [
+            'a plan change the stock cannot serve',
+            listed(409, 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ['7', 'CH']),
+            { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', planId: 7, country: 'CH' },
+        ],
         ['another billing interval', listed(400, 'SUBSCRIPTION_BILLING_INTERVAL_CHANGE'), { code: 'SUBSCRIPTION_BILLING_INTERVAL_CHANGE' }],
         ['a missing delivery address', listed(400, 'SUBSCRIPTION_DELIVERY_ADDRESS_REQUIRED'), { code: 'SUBSCRIPTION_DELIVERY_ADDRESS_REQUIRED' }],
         ['a foreign SetupIntent', listed(400, 'SUBSCRIPTION_SETUP_INTENT_INVALID'), { code: 'SUBSCRIPTION_SETUP_INTENT_INVALID' }],
