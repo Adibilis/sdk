@@ -71,6 +71,11 @@ describe('entry point boundary', () => {
         expect(rel(reachableFrom(resolve(DIST, 'server.js')))).toContain('property/property-client.js');
     });
 
+    it('the browser entry cannot reach the review client', () => {
+        expect(rel(reachableFrom(resolve(DIST, 'client-entry.js')))).not.toContain('review/review-client.js');
+        expect(rel(reachableFrom(resolve(DIST, 'server.js')))).toContain('review/review-client.js');
+    });
+
     /**
      * The subscription clients carry the key and the buyer's whole checkout, while the schedule helpers next to them are meant
      * for the browser — the cadence chooser and the price line run client-side. Same folder, two sides; this pins the split.

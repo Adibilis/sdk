@@ -32,6 +32,8 @@ export type {
     PublishedPropertyPageOptions,
     PublishedPropertyResponse,
 } from './property/property-client.js';
+export { fetchGoogleReviews } from './review/review-client.js';
+export type { PublishedReviewResponse, PublishedReviewsResponse } from './review/review-client.js';
 export { subscribeNewsletter } from './shop/newsletter-client.js';
 export type { NewsletterLanguage, NewsletterSignupRequest } from './shop/newsletter-client.js';
 export { fetchShopProduct, fetchShopProducts } from './shop/product-client.js';
