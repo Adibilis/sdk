@@ -17,6 +17,7 @@ import type { CustomerDeliveryPersonRequest, SchedulePattern } from '../subscrip
 import { CUSTOMER_SESSION_COOKIE, MAX_SESSION_TOKEN_LENGTH } from './session.js';
 import { AdibilisApiError } from '../client/errors.js';
 import type {
+    CustomerInvoicePdf,
     CustomerPage,
     CustomerPaymentMethodSetup,
     CustomerPaymentMethodUpdate,
@@ -29,6 +30,7 @@ const SESSION_HEADER = 'X-Customer-Session';
 const SUBSCRIPTION_PATH = '/api/customer/subscription';
 const MAX_PAGE_SIZE = 200;
 const SESSION_TOKEN_SHAPE = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_SESSION_TOKEN_LENGTH}}$`);
+const PDF = 'application/pdf';
 
 /** What `customerFromCookies` reads: Next's `cookies()` and `request.cookies`, or any store with the same `get`. */
 export interface CookieReader {
@@ -138,6 +140,42 @@ function cookieValue(header: string, name: string): string | undefined {
     return found;
 }
 
+function filenameOf(disposition: string | null): string | null {
+    const extended = /filename\*\s*=\s*UTF-8''([^;\s]+)/i.exec(disposition ?? '')?.[1];
+    if (extended !== undefined) {
+        try {
+            return decodeURIComponent(extended);
+        } catch {
+            // a malformed escape: fall back to the plain parameter
+        }
+    }
+    const quoted = /filename\s*=\s*"((?:[^"\\]|\\.)*)"/i.exec(disposition ?? '')?.[1];
+    if (quoted !== undefined) return quoted.replace(/\\(.)/g, '$1');
+    return /filename\s*=\s*([^;\s"]+)/i.exec(disposition ?? '')?.[1] ?? null;
+}
+
+function invoicePdfOf(response: Response, invoiceId: number): CustomerInvoicePdf {
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.split(';')[0]?.trim().toLowerCase() !== PDF) {
+        void response.body?.cancel();
+        throw new Error(`Core answered ${contentType || 'without a content type'} for invoice ${invoiceId}, not a PDF`);
+    }
+    const disposition = response.headers.get('content-disposition');
+    const filename = filenameOf(disposition) ?? `${invoiceId}.pdf`;
+    return {
+        body: response.body ?? new Blob().stream(),
+        contentType: PDF,
+        filename,
+        headers: {
+            'Content-Type': PDF,
+            'Content-Disposition': disposition ?? `inline; filename="${invoiceId}.pdf"`,
+            'Cache-Control': 'private, no-store',
+            'Content-Security-Policy': "default-src 'none'",
+            'X-Content-Type-Options': 'nosniff',
+        },
+    };
+}
+
 const MIN_UNIT_AMOUNT = 0.01;
 const PlanChangeModel = CustomerPlanChangeRequestModel.extend({ planId: IdModel });
 const ScheduleChangeModel = CustomerScheduleRequestModel.superRefine((request, ctx) => {
@@ -182,7 +220,7 @@ function deliveryPersonChange(id: number, deliveryPerson: CustomerDeliveryPerson
  * any id that is not theirs. The session token lives in a private field: it is not enumerable, not serialised, not logged.
  *
  * Every call: 401 `CUSTOMER_SESSION_INVALID` (expired, revoked, or no longer a customer — sign in again), 404
- * `SHOP_MODULE_DISABLED`, 429 `TOO_MANY_REQUESTS` (reads 60, changes 10, card calls 5 per visitor a minute).
+ * `SHOP_MODULE_DISABLED`, 429 `TOO_MANY_REQUESTS` (reads 60, changes 10, invoice PDFs 10, card calls 5 per visitor a minute).
  */
 export class CustomerClient {
     readonly #client: AdibilisClient;
@@ -215,6 +253,22 @@ export class CustomerClient {
     async listTransactions(query: CustomerTransactionQuery = {}): Promise<CustomerPage<CustomerTransaction>> {
         const init = this.#init();
         return this.#client.get(withQuery('/api/customer/transaction', TransactionQueryModel.parse(query)), init);
+    }
+
+    /**
+     * The PDF of core's invoice behind a transaction row (`transaction.invoiceId`), for a route of the shop to stream to the
+     * browser; core keeps no public URL for it. Never cached: the answer carries `Cache-Control: private, no-store`. 404
+     * `INVOICE_NOT_FOUND` for an invoice that is not in the customer's own transactions (another customer's answers the same),
+     * 429 beyond 10 PDFs per visitor a minute. Rejects with an `Error` when core answers 200 with something other than a PDF.
+     */
+    async invoicePdf(invoiceId: number): Promise<CustomerInvoicePdf> {
+        const init = this.#init();
+        const id = IdModel.parse(invoiceId);
+        const response = await this.#client.download(`/api/customer/invoice/${id}/pdf`, {
+            ...init,
+            headers: { ...init.headers, Accept: `${PDF}, application/json` },
+        });
+        return invoicePdfOf(response, id);
     }
 
     /**

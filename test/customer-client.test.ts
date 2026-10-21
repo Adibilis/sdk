@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { createAdibilisClient } from '../src/client/api-client';
 import { AdibilisApiError } from '../src/client/errors';
 import { customerFromCookies } from '../src/customer/customer-client';
+import { customerRefusalOf } from '../src/customer/refusal';
 
 const TOKEN = 'k3Jx9QvUeR2m1sYtPz8aLwB4nC7dF0gH5iJ6oK_-abc';
 const visitor = { clientIp: '203.0.113.7' };
@@ -10,7 +11,7 @@ const callHeaders = { headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-
 
 const page = { content: [], number: 0, size: 20, totalPages: 0, totalElements: 0 };
 
-const mockClient = () => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() });
+const mockClient = () => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), download: vi.fn() });
 const signedIn = (client = mockClient()) => ({ client, customer: customerFromCookies(client, `theme=dark; __Host-adbl_customer=${TOKEN}`, visitor)! });
 
 describe('customerFromCookies', () => {
@@ -160,5 +161,108 @@ describe('logout', () => {
         await expect(customer.logout()).resolves.toBeUndefined();
 
         expect(client.delete).toHaveBeenCalledWith('/api/customer/session', callHeaders);
+    });
+});
+
+describe('invoicePdf', () => {
+    const pdfBytes = new Uint8Array([37, 80, 68, 70, 45, 49]);
+    const pdfAnswer = (disposition: string | null, contentType = 'application/pdf') =>
+        new Response(pdfBytes, {
+            status: 200,
+            headers: { 'content-type': contentType, ...(disposition === null ? {} : { 'content-disposition': disposition }) },
+        });
+    const coreCustomer = (answer: Response) => {
+        const fetchMock = vi.fn().mockResolvedValue(answer);
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+        return { fetchMock, customer: customerFromCookies(client, `__Host-adbl_customer=${TOKEN}`, visitor)! };
+    };
+
+    it('streams the PDF with the headers to answer the browser with', async () => {
+        const { fetchMock, customer } = coreCustomer(pdfAnswer('inline; filename="RE-2026-0042.pdf"'));
+
+        const pdf = await customer.invoicePdf(42);
+
+        expect(pdf.contentType).toBe('application/pdf');
+        expect(pdf.filename).toBe('RE-2026-0042.pdf');
+        expect(pdf.headers).toEqual({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': 'inline; filename="RE-2026-0042.pdf"',
+            'Cache-Control': 'private, no-store',
+            'Content-Security-Policy': "default-src 'none'",
+            'X-Content-Type-Options': 'nosniff',
+        });
+        expect(new Uint8Array(await new Response(pdf.body).arrayBuffer())).toEqual(pdfBytes);
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toBe('https://core.test/api/customer/invoice/42/pdf');
+        expect(init.method).toBe('GET');
+        expect(init.cache).toBe('no-store');
+        expect(init.headers['X-Customer-Session']).toBe(TOKEN);
+        expect(init.headers['X-Shop-Client-Ip']).toBe('203.0.113.7');
+        expect(init.headers['X-API-Secret-Key']).toBe('k');
+        expect(init.headers['Accept']).toBe('application/pdf, application/json');
+    });
+
+    it('sends the session in a header, never in the URL', async () => {
+        const { client, customer } = signedIn();
+        client.download.mockResolvedValue(pdfAnswer('inline; filename="RE-1.pdf"'));
+
+        await customer.invoicePdf(7);
+
+        expect(client.download).toHaveBeenCalledWith('/api/customer/invoice/7/pdf', {
+            headers: { ...callHeaders.headers, Accept: 'application/pdf, application/json' },
+            cache: 'no-store',
+        });
+    });
+
+    it.each([
+        ['a non-ASCII number, from filename*', `inline; filename="=?UTF-8?Q?R=C3=A9-1.pdf?="; filename*=UTF-8''R%C3%A9-1.pdf`, 'Ré-1.pdf'],
+        ['an escaped quote', 'inline; filename="RE \\"1\\".pdf"', 'RE "1".pdf'],
+        ['a token without quotes', 'inline; filename=RE-1.pdf', 'RE-1.pdf'],
+        ['no Content-Disposition, from the id', null, '42.pdf'],
+    ])('names the file for %s', async (_name, disposition, filename) => {
+        const { customer } = coreCustomer(pdfAnswer(disposition));
+
+        const pdf = await customer.invoicePdf(42);
+
+        expect(pdf.filename).toBe(filename);
+        expect(pdf.headers['Content-Disposition']).toBe(disposition ?? 'inline; filename="42.pdf"');
+    });
+
+    it('accepts a PDF content type with parameters', async () => {
+        const { customer } = coreCustomer(pdfAnswer('inline; filename="RE-1.pdf"', 'application/PDF;charset=binary'));
+
+        await expect(customer.invoicePdf(1)).resolves.toMatchObject({ contentType: 'application/pdf' });
+    });
+
+    it('refuses to pass on anything but a PDF', async () => {
+        const { customer } = coreCustomer(pdfAnswer('inline; filename="x.html"', 'text/html'));
+
+        await expect(customer.invoicePdf(1)).rejects.toThrow(/text\/html.*not a PDF/);
+    });
+
+    it.each([0, -3, 1.5])('refuses the invoice id %s before any request', async (id) => {
+        const { client, customer } = signedIn();
+
+        await expect(customer.invoicePdf(id)).rejects.toBeInstanceOf(ZodError);
+        expect(client.download).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        [404, 'INVOICE_NOT_FOUND'],
+        [401, 'CUSTOMER_SESSION_INVALID'],
+        [429, 'TOO_MANY_REQUESTS'],
+    ] as const)('reads core\'s %s as the refusal %s, without the session in the error', async (status, code) => {
+        const { customer } = coreCustomer(
+            new Response(JSON.stringify({ error: 'x', errorList: { [code]: [] }, url: 'https://core.test/api/customer/invoice/9/pdf' }), {
+                status,
+                headers: { 'content-type': 'application/json' },
+            })
+        );
+
+        const error = await customer.invoicePdf(9).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(AdibilisApiError);
+        expect(customerRefusalOf(error)).toEqual({ code });
+        expect(JSON.stringify({ message: (error as Error).message, body: (error as AdibilisApiError).body })).not.toContain(TOKEN);
     });
 });

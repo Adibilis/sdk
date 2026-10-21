@@ -420,13 +420,61 @@ the `paymentMethod` it reports, not an assumption.
 
 Open the SetupIntent when the customer clicks "Change card", not on page load.
 
+**Invoices.** Each `listTransactions()` row carries core's own sales invoice for the charge:
+`invoiceId` and `invoiceNumber`, both `null` while core has none for the row — then show no
+download. (Rows no longer carry Stripe's `hostedInvoiceUrl` / `invoicePdfUrl`; needs the core
+release with `GET /api/customer/invoice/{id}/pdf`.) The PDF has no public URL: a route of the shop
+fetches it with `customer.invoicePdf(invoiceId)` and streams it on. The account page links to that
+route (`<a href={`/api/account/invoice/${row.invoiceId}`}>`, plus `download` to save instead of
+open):
+
+```typescript
+// app/api/account/invoice/[id]/route.ts
+import { cookies } from 'next/headers';
+import { customerFromCookies, customerRefusalOf, expiredCustomerSessionCookie } from '@adbls/sdk/server';
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const id = Number((await params).id);
+    const customer = customerFromCookies(core, await cookies(), { clientIp: visitorIpOf(request) });
+    if (!customer) return Response.redirect(new URL('/account/login', request.url), 303);
+    if (!Number.isSafeInteger(id) || id < 1) return new Response(null, { status: 404 });
+    try {
+        const pdf = await customer.invoicePdf(id);
+        return new Response(pdf.body, { headers: pdf.headers }); // inline, <invoiceNumber>.pdf, no-store
+    } catch (error) {
+        switch (customerRefusalOf(error)?.code) {
+            case 'INVOICE_NOT_FOUND':
+                return new Response(null, { status: 404 });
+            case 'TOO_MANY_REQUESTS':
+                return new Response(null, { status: 429 });
+            case 'CUSTOMER_SESSION_INVALID':
+                return new Response(null, {
+                    status: 303,
+                    headers: { Location: '/account/login', 'Set-Cookie': expiredCustomerSessionCookie().header },
+                });
+            default:
+                throw error;
+        }
+    }
+}
+```
+
+`invoicePdf` resolves with `body` (the PDF as core streams it; it can be read once), `contentType`
+(`application/pdf`), `filename` (`<invoiceNumber>.pdf`) and `headers` for the browser: core's
+`Content-Disposition` (inline), `Cache-Control: private, no-store`, `Content-Security-Policy:
+default-src 'none'` and `X-Content-Type-Options: nosniff`. Never cache the PDF or hand it out on a
+URL without the session. Core answers 404 `INVOICE_NOT_FOUND` for every invoice that is not in the
+signed-in customer's own transactions — another customer's, an unknown id — and 429 beyond 10 PDFs
+per visitor a minute (its own budget). An answer that is not a PDF rejects with an `Error`, so the
+route never passes anything else on under the shop's origin.
+
 **What core holds you to:**
 
 - **`clientIp` on every call.** `requestLoginLink`, `exchangeLoginToken` and `customerFromCookies`
   all take the visitor's address, with the checkout's rule: an IPv4 or IPv6 literal, IPv4-mapped
   addresses sent as IPv4. Core throttles per visitor with it; a missing or malformed one rejects
   locally before anything is sent.
-- **Budgets.** Per visitor a minute: 60 reads, 10 changes, 5 card calls, 5 sign-in links, 30
+- **Budgets.** Per visitor a minute: 60 reads, 10 changes, 10 invoice PDFs, 5 card calls, 5 sign-in links, 30
   sign-ins and logouts together; 10 SetupIntents per customer an hour; 5 sign-in mails per address
   an hour (further requests still answer 202, nothing is sent). Every change answers the
   subscription as it is now — render that instead of reading it again.
@@ -469,7 +517,7 @@ Open the SetupIntent when the customer clicks "Change card", not on page load.
   at the same billing interval. Core cannot know your prices and charges what your server sends:
   build `lines` on the server from your own price list and the stored configuration, never from a
   price, fee or amount the browser posted.
-- **Ids are core's.** Another customer's subscription or delivery answers 404, exactly like a
+- **Ids are core's.** Another customer's subscription, delivery or invoice answers 404, exactly like a
   missing one; responses never carry a contact id.
 
 Every call checks its input locally first — the generated schema, positive ids, a well-formed
@@ -752,6 +800,11 @@ the customer session and the portal; an older core answers their endpoints with 
 generated ones; the release that raises the dependency replaces it with re-exports, and nothing that
 imports from the SDK changes.
 
+`invoicePdf` and the transactions' `invoiceId` / `invoiceNumber` need the core release after 1.9.7
+that serves `GET /api/customer/invoice/{id}/pdf`. An older core answers that path with 404 and still
+sends Stripe's `hostedInvoiceUrl` / `invoicePdfUrl` on the rows instead, which this SDK no longer
+types: upgrade core and the SDK together.
+
 ## Two credentials, never confuse them
 
 - **Publishing** — no token at all: GitHub Actions publishes via npm trusted publishing (OIDC).
@@ -784,6 +837,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `POST /api/customer/session` | exchanges the link's token for a 30-day session (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID`; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
 | `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
 | `GET /api/customer/subscription[/{id}]`, `GET /api/customer/transaction` | the signed-in customer's subscriptions and payments (`X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `GET /api/customer/invoice/{id}/pdf` | the PDF of an invoice in the signed-in customer's transactions (`invoicePdf`); 404 `INVOICE_NOT_FOUND` for any other; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `POST\|PATCH /api/customer/subscription/{id}/payment-method` | the card change (`beginPaymentMethodUpdate`, `confirmPaymentMethod`); 429 beyond 5 per visitor or 120 per shop server a minute, and beyond 10 SetupIntents per customer an hour |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |

@@ -93,6 +93,36 @@ describe('createAdibilisClient', () => {
         await expect(client.post('/api/customer/login-link', { email: 'jane@example.com' })).resolves.toBeNull();
     });
 
+    it('downloads a file: the response untouched, its body unread, with the key', async () => {
+        const pdf = new Response(new Uint8Array([37, 80, 68, 70]), { status: 200, headers: { 'content-type': 'application/pdf' } });
+        const fetchMock = vi.fn().mockResolvedValue(pdf);
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        const response = await client.download('/api/customer/invoice/5/pdf', { headers: { Accept: 'application/pdf' } });
+
+        expect(response).toBe(pdf);
+        expect(response.bodyUsed).toBe(false);
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toBe('https://core.test/api/customer/invoice/5/pdf');
+        expect(init.method).toBe('GET');
+        expect((init.headers as Record<string, string>)['X-API-Secret-Key']).toBe('k');
+        expect((init.headers as Record<string, string>)['Accept']).toBe('application/pdf');
+    });
+
+    it('rejects a refused download like a refused read', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(JSON.stringify({ errorList: { INVOICE_NOT_FOUND: [] } }), { status: 404, headers: { 'content-type': 'application/json' } })
+        );
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        await expect(client.download('/api/customer/invoice/5/pdf')).rejects.toMatchObject({
+            name: 'AdibilisApiError',
+            status: 404,
+            body: { errorList: { INVOICE_NOT_FOUND: [] } },
+            path: '/api/customer/invoice/5/pdf',
+        });
+    });
+
     it('rejects an empty api key at construction', () => {
         expect(() => createAdibilisClient({ baseUrl: 'https://core.test', apiKey: '' })).toThrow(/apiKey/);
     });
