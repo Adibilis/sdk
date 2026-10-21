@@ -29,7 +29,7 @@
         "access": "public"
     },
     "dependencies": {
-        "@adbls/api-types": "^1.9.9"
+        "@adbls/api-types": "^1.9.14"
     },
     "peerDependencies": {
         "react": ">=19",

@@ -193,6 +193,7 @@ try {
     const refusal = subscriptionCheckoutRefusalOf(error); // null for anything else: rethrow
     // SUBSCRIPTION_AMOUNT_CHANGED → preview again, show refusal.amount; SUBSCRIPTION_CHECKOUT_EXPIRED and
     // SUBSCRIPTION_CHECKOUT_CHANGED → start over with a NEW cart.id; SUBSCRIPTION_ALREADY_ACTIVE → it went through: show success;
+    // SUBSCRIPTION_PLAN_NOT_AVAILABLE → not available for delivery to refusal.country;
     // SUBSCRIPTION_START_DATE_INVALID → refusal.earliest; TOO_MANY_REQUESTS → wait, then try again
 }
 
@@ -236,6 +237,12 @@ Core sends the currency upper-case (`CHF`); Stripe wants it lower-case.
   (the plan was unlisted or archived since you read the catalog), 400 `SUBSCRIPTION_START_DATE_NOT_ALLOWED`
   (not one of `validFirstDeliveryDates`) and 429 `TOO_MANY_REQUESTS`. Re-read the catalog for the
   first two; do not retry the last in a loop.
+- **Out of stock (core ≥ v1.9.14):** a plan can name products each delivery takes from stock. When the
+  first delivery cannot be served to the buyer's delivery country (a "stop at 0" product its distributor
+  has run out of), checkout and its preview answer 409 `SUBSCRIPTION_PLAN_NOT_AVAILABLE`, read as
+  `{ code, planId, country }` (`country` is null when core had no country). Tell the buyer the plan is
+  not available for delivery to that country. A customer's plan change in the portal is refused the same
+  way (`customerRefusalOf`), when the new plan adds products that are out of stock there.
 - **`clientIp` is required** on preview, start and status, and must be an IPv4 or IPv6 literal:
   core throttles 10 checkouts and 60 status reads per visitor a minute through it, and ignores any
   other value, which leaves every visitor in the shop's one per-server bucket. An IPv4-mapped
@@ -877,10 +884,11 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.9`,
-the first core release serving `GET /api/review/published` (`fetchGoogleReviews`); an older core
-answers it with 404. `^1.9.7` was the first with stock availability (`ShopProductResponse.available`
-and the 409 `SHOP_PRODUCT_NOT_AVAILABLE` checkout refusal).
+The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.14`,
+the first core release refusing a subscription plan whose first delivery is out of stock (409
+`SUBSCRIPTION_PLAN_NOT_AVAILABLE`). `^1.9.9` was the first serving `GET /api/review/published`
+(`fetchGoogleReviews`; an older core answers it with 404), `^1.9.7` the first with stock availability
+(`ShopProductResponse.available` and the 409 `SHOP_PRODUCT_NOT_AVAILABLE` checkout refusal).
 `submitPropertyEnquiry` **needs core ≥ v1.5.1**: an older core lacks
 `POST /api/property/{id}/enquiry`, and the resulting 404/405 reads like "property not published".
 Core `v1.4.6` was the first release carrying
