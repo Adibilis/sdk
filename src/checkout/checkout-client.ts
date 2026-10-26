@@ -5,8 +5,9 @@ import { AdibilisApiError } from '../client/errors.js';
 
 export type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse };
 
-/** `CheckoutRequest` plus the grand total the shop showed — typed here until `@adbls/api-types` carries it. */
-export type CheckoutStartRequest = Omit<CheckoutRequest, 'preview'> & {
+/** `CheckoutRequest` plus the grand total the shop showed and the chosen pickup site — typed here until `@adbls/api-types` carries them. */
+export type CheckoutStartRequest = Omit<CheckoutRequest, 'preview' | 'order'> & {
+    order: CheckoutRequest['order'] & { pickupSiteId?: number | null };
     /** Core refuses with 409 `CHECKOUT_AMOUNT_CHANGED` when the invoice would total something else. */
     expectedAmount?: number;
 };

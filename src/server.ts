@@ -5,6 +5,7 @@ export { createAdibilisClient } from './client/api-client.js';
 export type { AdibilisClient, AdibilisClientConfig } from './client/api-client.js';
 export { AdibilisApiError } from './client/errors.js';
 export { fetchHolidays } from './shop/holidays-client.js';
+export { fetchPickupSites } from './shop/pickup-site-client.js';
 export { checkCore } from './status/core-check.js';
 export type { CoreCheck, CoreCheckOptions } from './status/core-check.js';
 export { startCheckout, previewCheckout, amountChangedOf, productUnavailableOf, getOrderStatus } from './checkout/checkout-client.js';
