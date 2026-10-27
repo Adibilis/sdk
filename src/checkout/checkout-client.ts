@@ -103,6 +103,31 @@ export interface ProductUnavailable {
     country: string | null;
 }
 
+function refusedWith(error: unknown, code: string): boolean {
+    if (!(error instanceof AdibilisApiError) || error.status !== 409) return false;
+    const errorList = (error.body as { errorList?: Record<string, unknown> } | null)?.errorList;
+    return errorList != null && typeof errorList === 'object' && code in errorList;
+}
+
+/**
+ * True when `error` is core's refusal of a checkout whose reference names an order core has
+ * expired or cancelled (409 `CHECKOUT_EXPIRED`): core expires an untouched checkout thirty minutes
+ * after the buyer last submitted it. Nothing can be paid under that reference any more — mint a
+ * new one, tell the buyer the reservation lapsed and send the checkout again.
+ */
+export function checkoutExpiredOf(error: unknown): boolean {
+    return refusedWith(error, 'CHECKOUT_EXPIRED');
+}
+
+/**
+ * True when `error` is core's refusal of a new checkout while a payment for the same buyer email is
+ * still being processed (409 `CHECKOUT_PAYMENT_IN_PROGRESS`). Nothing was created; show it and let
+ * the buyer try again in a minute — the open payment either settles or fails by then.
+ */
+export function checkoutPaymentInProgressOf(error: unknown): boolean {
+    return refusedWith(error, 'CHECKOUT_PAYMENT_IN_PROGRESS');
+}
+
 /**
  * The refused product when `error` is core's refusal of a checkout or preview line it cannot ship
  * (409 `SHOP_PRODUCT_NOT_AVAILABLE`), otherwise `null`. Nothing was created; tell the buyer the
