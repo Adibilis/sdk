@@ -62,9 +62,10 @@ const INITIAL_FORM_STATE: FormState = { isProcessing: false, isReady: false, ste
  *    exists in core from this moment — and answers `publishableKey` + `clientSecret`.
  * 2. The shop calls `setStripe({ publishableKey, clientSecret })` and moves to `step: 'payment'`.
  *    Step 2 mounts the Payment Element in client-secret mode; step 1 is unmounted, not hidden.
- * 3. Editing is `goBack()` and a resubmit. Keep the reference for a plain retry and for a corrected
- *    email (core re-binds the order); mint a new one when anything else changed — core then replaces
- *    the buyer email's open checkout in place (same number). Core expires an untouched checkout
+ * 3. Editing is `goBack()` and a resubmit. Keep the reference for a plain retry and whenever the email
+ *    changed (core re-binds the order with the full payload); mint a new one when the email is the
+ *    same and anything else changed — core then replaces the buyer email's open checkout in place
+ *    (same number). Core expires an untouched checkout
  *    thirty minutes after the last submit; the next submit then answers 409 `CHECKOUT_EXPIRED`
  *    (`checkoutExpiredOf`) — mint a new reference.
  * 4. "Pay" only confirms. The success page decides with `checkoutStatusOutcome`.
