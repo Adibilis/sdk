@@ -14,9 +14,10 @@ export type {
 } from './order/order-details.js';
 export { isHoliday } from './shop/holidays-client.js';
 export type { HolidayRange } from './shop/holidays-client.js';
+export type { PickupSite } from './shop/pickup-site-client.js';
 export { priceIn, shopImageUrl, vatNoteOf } from './shop/product-image.js';
 export type { VatNote } from './shop/product-image.js';
-export type { ProductPriceResponse, ShopProductImageResponse, ShopProductResponse } from '@adbls/api-types';
+export type { ProductPriceResponse, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
 
 export { confirmMethodOf, isDynamicEntry } from './subscription/types.js';
 export type {

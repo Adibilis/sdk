@@ -541,7 +541,7 @@ Payments → "Enable satellites") and then ticks "List on satellite" per product
 in each currency the shop sells in.
 
 ```typescript
-import { createAdibilisClient, fetchShopProducts, fetchShopProduct } from '@adbls/sdk/server';
+import { createAdibilisClient, fetchShopProducts, fetchShopProduct, fetchPickupSites } from '@adbls/sdk/server';
 import { priceIn, shopImageUrl, vatNoteOf } from '@adbls/sdk';
 
 const products = await fetchShopProducts(core);          // every listed product, by title
@@ -564,9 +564,15 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   (`priceMode: 'BRUTTO'`, the price already contains VAT), `'excluded'` (`'NETTO'`, VAT is added on
   top at checkout) or `null` for a VAT-exempt product, which shows no note. The SDK bundles no
   language, so the site words it. Each price also carries a `vatRate` (percent, `null` when
-  exempt), but don't show it by default: an account with Stripe automatic tax charges the rate of
-  the buyer's country, which can differ from it. This needs a core release with product VAT; an
-  older core sends neither field and reads as VAT-included, which is what its prices always were.
+  exempt): since core v1.9.20 the rate of the product's VAT class (standard, reduced, accommodation)
+  in the organization's own country. Don't show it by default: checkout charges by the buyer's
+  country — a delivery abroad is 0 % — and an account with Stripe automatic tax charges that
+  country's rate. A core before product VAT sends neither field and reads as VAT-included, which is
+  what its prices always were.
+- **Pickup sites (core ≥ v1.9.20).** `fetchPickupSites(core)` lists the storage sites a buyer can
+  collect from, each with its address; an install without the inventory module answers `[]`. A
+  `PICKUP` order or subscription checkout names the chosen one as `pickupSiteId`, and core prices
+  it by that site's country instead of the delivery address.
 - **Checkout prices come from here too.** Put `productId` on an order line and core prices it from
   the product's price in the order's `currency`, ignoring `unitPrice`, and recomputes `grandTotal`.
   A product with no price in that currency is refused (`SHOP_PRODUCT_NOT_PRICED`) before any order
@@ -884,9 +890,11 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.14`,
-the first core release refusing a subscription plan whose first delivery is out of stock (409
-`SUBSCRIPTION_PLAN_NOT_AVAILABLE`). `^1.9.9` was the first serving `GET /api/review/published`
+The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.20`,
+the first core release with pickup sites (`GET /api/shop/pickup-site`, `pickupSiteId` on an order and a
+subscription checkout) and VAT by country and class (a shop price's `vatRate` is the rate of the
+product's VAT class in the organization's country). `^1.9.14` was the first refusing a subscription
+plan whose first delivery is out of stock (409 `SUBSCRIPTION_PLAN_NOT_AVAILABLE`), `^1.9.9` the first the first serving `GET /api/review/published`
 (`fetchGoogleReviews`; an older core answers it with 404), `^1.9.7` the first with stock availability
 (`ShopProductResponse.available` and the 409 `SHOP_PRODUCT_NOT_AVAILABLE` checkout refusal).
 `submitPropertyEnquiry` **needs core ≥ v1.5.1**: an older core lacks

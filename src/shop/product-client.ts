@@ -1,7 +1,10 @@
-import type { ProductPriceResponse, ShopProductImageResponse, ShopProductResponse } from '@adbls/api-types';
+import type { ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from '@adbls/api-types';
 import type { AdibilisClient } from '../client/api-client.js';
 
-export type { ProductPriceResponse, ShopProductImageResponse, ShopProductResponse };
+export type { ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse };
+
+/** The name this SDK exported the shop price under before core named it `ShopProductPriceResponse`. */
+export type ProductPriceResponse = ShopProductPriceResponse;
 
 /**
  * Every product an admin listed on satellites, archived ones excluded, ordered by title. Unpaged:

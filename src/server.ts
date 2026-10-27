@@ -5,6 +5,7 @@ export { createAdibilisClient } from './client/api-client.js';
 export type { AdibilisClient, AdibilisClientConfig } from './client/api-client.js';
 export { AdibilisApiError } from './client/errors.js';
 export { fetchHolidays } from './shop/holidays-client.js';
+export { fetchPickupSites } from './shop/pickup-site-client.js';
 export { checkCore } from './status/core-check.js';
 export type { CoreCheck, CoreCheckOptions } from './status/core-check.js';
 export { startCheckout, previewCheckout, amountChangedOf, productUnavailableOf, getOrderStatus } from './checkout/checkout-client.js';
@@ -37,7 +38,7 @@ export type { PublishedReviewResponse, PublishedReviewsResponse } from './review
 export { subscribeNewsletter } from './shop/newsletter-client.js';
 export type { NewsletterLanguage, NewsletterSignupRequest } from './shop/newsletter-client.js';
 export { fetchShopProduct, fetchShopProducts } from './shop/product-client.js';
-export type { ProductPriceResponse, ShopProductImageResponse, ShopProductResponse } from './shop/product-client.js';
+export type { ProductPriceResponse, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
 
 export type {
     DynamicSubscriptionEntry,

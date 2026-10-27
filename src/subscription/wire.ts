@@ -63,6 +63,7 @@ export const SubscriptionCheckoutRequestModel = z.object({
     billingPerson: OrderIngestPersonRequestModel,
     deliveryPerson: OrderIngestPersonRequestModel.optional().nullable(),
     fulfillmentType: z.enum(['DELIVERY', 'PICKUP', 'DIGITAL', 'ON_SITE']).optional().nullable(),
+    pickupSiteId: z.number().int().optional().nullable(),
     customerNote: z.string().min(0).max(2000).optional().nullable(),
     startDate: z.string().optional().nullable(),
     externalSource: z.string().regex(/\S/).min(0).max(40),
