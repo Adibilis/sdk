@@ -8,6 +8,7 @@ import {
     previewSubscriptionCheckout,
     startSubscriptionCheckout,
 } from '../src/subscription/checkout-client';
+import type { SubscriptionStatus } from '../src/subscription/types';
 import type { SubscriptionCheckoutRequest } from '../src/subscription/checkout-client';
 
 const visitor = { clientIp: '203.0.113.7' };
@@ -275,5 +276,13 @@ describe('getSubscriptionStatus', () => {
         await expect(getSubscriptionStatus(client, 'flora', 'cart/7 #x', visitor)).resolves.toEqual(status);
 
         expect(client.get).toHaveBeenCalledWith('/api/subscription/status?externalSource=flora&externalRef=cart%2F7+%23x', visitorHeader);
+    });
+
+    it('carries EXPIRED, the status of a checkout core gave up on', async () => {
+        const expired: SubscriptionStatus = 'EXPIRED';
+        const client = mockClient();
+        client.get.mockResolvedValue({ subscriptionId: 9, number: 'SU-2026-0009', status: expired, stripeStatus: null, firstPaymentStatus: null, firstDeliveryAt: null, nextBillingAt: null });
+
+        await expect(getSubscriptionStatus(client, 'flora', 'cart-7', visitor)).resolves.toMatchObject({ status: 'EXPIRED' });
     });
 });
