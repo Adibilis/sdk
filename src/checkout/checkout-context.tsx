@@ -11,9 +11,9 @@ export interface FormState {
 }
 
 /**
- * The Payment Element is mounted in client-secret mode, so the secret is handed over up front.
- * There is deliberately no `amount`/`currency` here: core creates the order and the PaymentIntent,
- * so the browser never computes what to charge.
+ * What step 2 mounts the Payment Element with: the order (or subscription) already exists in core
+ * and at Stripe, so Elements runs in client-secret mode. There is deliberately no `amount`/`currency`
+ * here: core created the PaymentIntent, so the browser never computes what to charge.
  */
 export interface StripeSettings {
     publishableKey: string;
@@ -41,6 +41,12 @@ export interface CheckoutContextValue {
     /** Set by the payment element, invoked once confirmation resolves. */
     paymentCallback: (() => void) | null;
     setPaymentCallback: (fn: (() => void) | null) => void;
+    /**
+     * Step 2 → step 1: drops the Stripe settings and the ready flag, keeps the tax breakdown and the
+     * registered handlers. The shop keeps its form values (a `FormProvider` mounted above both steps)
+     * and resubmits with the same reference — core treats that as the same checkout.
+     */
+    goBack: () => void;
     onSuccess: () => void;
 }
 
@@ -48,6 +54,20 @@ const CheckoutContext = createContext<CheckoutContextValue | null>(null);
 
 const INITIAL_FORM_STATE: FormState = { isProcessing: false, isReady: false, step: 'customer_info' };
 
+/**
+ * The two-step checkout contract every satellite follows:
+ *
+ * 1. Step 1 (`step: 'customer_info'`) is the shop's own form. Submitting it calls the shop's route
+ *    handler, which calls `startCheckout` / `startSubscriptionCheckout` — the order or subscription
+ *    exists in core from this moment — and answers `publishableKey` + `clientSecret`.
+ * 2. The shop calls `setStripe({ publishableKey, clientSecret })` and moves to `step: 'payment'`.
+ *    Step 2 mounts the Payment Element in client-secret mode; step 1 is unmounted, not hidden.
+ * 3. Editing is `goBack()` and a resubmit under the same reference: core re-opens the same checkout
+ *    with the new payload. A changed cart under a new reference replaces the buyer email's open
+ *    checkout in place. Core expires an untouched checkout thirty minutes after the last submit; the
+ *    next submit then answers 409 `CHECKOUT_EXPIRED` (`checkoutExpiredOf`) — mint a new reference.
+ * 4. "Pay" only confirms. The success page decides with `checkoutStatusOutcome`.
+ */
 export function CheckoutProvider({ children, onSuccess }: { children: ReactNode; onSuccess: () => void }) {
     const [formState, setFormState] = useState<FormState>(INITIAL_FORM_STATE);
     const [stripe, setStripe] = useState<StripeSettings | null>(null);
@@ -61,6 +81,10 @@ export function CheckoutProvider({ children, onSuccess }: { children: ReactNode;
     // identity on every update re-ran that effect forever and pinned the browser's main thread.
     const setProceedToPayment = useCallback((fn: (() => void) | null) => setProceedToPaymentState(() => fn), []);
     const setPaymentCallback = useCallback((fn: (() => void) | null) => setPaymentCallbackState(() => fn), []);
+    const goBack = useCallback(() => {
+        setFormState(INITIAL_FORM_STATE);
+        setStripe(null);
+    }, []);
 
     const value = useMemo<CheckoutContextValue>(
         () => ({
@@ -74,9 +98,10 @@ export function CheckoutProvider({ children, onSuccess }: { children: ReactNode;
             setProceedToPayment,
             paymentCallback,
             setPaymentCallback,
+            goBack,
             onSuccess,
         }),
-        [formState, stripe, taxBreakdown, proceedToPayment, setProceedToPayment, paymentCallback, setPaymentCallback, onSuccess]
+        [formState, stripe, taxBreakdown, proceedToPayment, setProceedToPayment, paymentCallback, setPaymentCallback, goBack, onSuccess]
     );
 
     return (
