@@ -1,7 +1,10 @@
 import type { AdibilisClient } from '../client/api-client.js';
 import { AdibilisApiError } from '../client/errors.js';
 
-/** A storage site a PICKUP order is collected from — typed here until `@adbls/api-types` carries it. */
+/**
+ * A storage site a PICKUP order is collected from: core's `ShopPickupSiteResponse`, with the address fields
+ * nullable — a site's address may lack any of them, which the generated type does not say.
+ */
 export interface ShopPickupSiteResponse {
     id: number;
     name: string;
