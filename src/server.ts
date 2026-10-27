@@ -17,6 +17,8 @@ export {
     checkoutPaymentInProgressOf,
     getOrderStatus,
 } from './checkout/checkout-client.js';
+export { checkoutStatusOutcome } from './checkout/checkout-status.js';
+export type { CheckoutOutcome } from './checkout/checkout-status.js';
 export type {
     CheckoutPreview,
     CheckoutRequest,
