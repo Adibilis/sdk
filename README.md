@@ -99,18 +99,22 @@ billing email mean to core on a resubmit after `goBack()`:
 | the same reference, a corrected email | the order is **re-bound** to the new email with the full payload (unless a payment is already moving: a retry). |
 | a new reference, the same email | that email's open, unpaid order is **replaced in place** — same order number, old invoice voided — with the full payload. Nothing is left behind to expire. |
 
-So the rule for the shop: keep the reference for a plain retry (another card) and for a corrected
-email; mint a **new** one whenever anything else in the payload changed (codonis-shop derives it from
-a fingerprint of the payload without the email). A declined card retried with another card never
-produces a second order or charge, and a changed cart never leaves an abandoned order behind. A 409
-`CHECKOUT_AMOUNT_CHANGED` also needs a new reference: retrying the old one re-invoices the old total.
+So the rule for the shop: **whenever the email changed, keep the reference** — with or without other
+changes, core re-binds the order with the full payload; a plain retry (another card) keeps it too;
+mint a **new** one only when the email is unchanged and anything else in the payload changed
+(flora and codonis-shop keep the last reference with the email and a fingerprint of the payload
+without it). A declined card retried with another card never produces a second order or charge, and
+a changed cart never leaves an abandoned order behind. Two more cases spend the reference: a 409
+`CHECKOUT_AMOUNT_CHANGED` (retrying the old one re-invoices the old total) and a "Pay" that Stripe
+refused for anything but a card, validation or 3-D Secure failure (the invoice is gone — go back to
+step 1 and resubmit under a new one).
 
 **Thirty minutes.** Core expires a checkout the buyer has not submitted again for thirty minutes
 (status `EXPIRED`): the invoice is voided at Stripe, and an automation rule in the ERP can mail the
 buyer. A submit under that reference answers 409 `CHECKOUT_EXPIRED` (`checkoutExpiredOf`): mint a
 new reference, tell the buyer the reservation lapsed, send the checkout again. A Stripe error on
 "Pay" that is not a `card_error` or `validation_error` (a voided invoice, an unexpected intent state)
-is handled the same way: back to step 1, resubmit. While the email's open payment is still being
+is handled the same way: back to step 1, resubmit under a new reference. While the email's open payment is still being
 processed (an asynchronous method), a new cart is refused with 409 `CHECKOUT_PAYMENT_IN_PROGRESS`
 (`checkoutPaymentInProgressOf`); nothing was created.
 
