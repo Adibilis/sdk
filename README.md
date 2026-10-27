@@ -45,11 +45,17 @@ mistakes:
 ## Checkout
 
 The payment integration is server-side calls on `@adbls/sdk/server` plus Stripe Elements in the
-browser. The order — and its Stripe invoice — only comes into being when the buyer clicks "Pay";
-until then a **preview** prices the cart and creates nothing.
+browser, in **two steps**: step 1 is the shop's own form, step 2 is the Payment Element alone. The
+order — and its Stripe invoice — comes into being **when the buyer leaves step 1**; until then a
+**preview** prices the cart and creates nothing. "Pay" only confirms. The React side of the contract
+is documented on `CheckoutProvider` in `@adbls/sdk/checkout` (`goBack()` for the way back).
 
 ```typescript
-import { createAdibilisClient, previewCheckout, startCheckout, amountChangedOf, productUnavailableOf, getOrderStatus } from '@adbls/sdk/server';
+import {
+    createAdibilisClient, previewCheckout, startCheckout, amountChangedOf, productUnavailableOf,
+    checkoutExpiredOf, checkoutPaymentInProgressOf, getOrderStatus,
+} from '@adbls/sdk/server';
+import { checkoutStatusOutcome } from '@adbls/sdk';
 
 const core = createAdibilisClient({ baseUrl: process.env.ADIBILIS_BASE_URL!, apiKey: process.env.ADIBILIS_API_KEY! });
 const request = {
@@ -62,28 +68,51 @@ const request = {
 const preview = await previewCheckout(core, request);
 // preview.amount, preview.taxAmount, preview.vatRate, preview.currency (lower-case), preview.publishableKey
 
-// 2. On "Pay": create the order and its invoice, refusing if the total moved since the preview.
+// 2. When the buyer leaves step 1: create the order and its invoice, refusing if the total moved since the preview.
 try {
-    const { clientSecret } = await startCheckout(core, { ...request, expectedAmount: preview.amount });
-    // hand clientSecret to the browser: stripe.confirmPayment({ elements, clientSecret, confirmParams: { return_url } })
+    const { clientSecret, publishableKey } = await startCheckout(core, { ...request, expectedAmount: preview.amount });
+    // to the browser: mount Elements with { clientSecret } and loadStripe(publishableKey); on "Pay":
+    // stripe.confirmPayment({ elements, confirmParams: { return_url } })
 } catch (error) {
-    const newAmount = amountChangedOf(error); // number on 409 CHECKOUT_AMOUNT_CHANGED, otherwise null
-    const unavailable = productUnavailableOf(error); // { productId, country } on 409 SHOP_PRODUCT_NOT_AVAILABLE, otherwise null
-    if (newAmount === null && unavailable === null) throw error;
-    // amount changed → core already voided the invoice: preview again, tell the buyer the price changed, let them pay again
-    // unavailable → nothing was created: say "not available for delivery to <country>", remove or mark the line, preview again
+    if (checkoutExpiredOf(error)) { /* the reference names an expired order: mint a new one, say the reservation lapsed, back to step 1 */ }
+    else if (checkoutPaymentInProgressOf(error)) { /* a payment for this email is still processing: say so, let the buyer retry in a minute */ }
+    else if (amountChangedOf(error) !== null) { /* core voided the invoice: preview again, show the new amount, back to step 1 */ }
+    else if (productUnavailableOf(error) !== null) { /* nothing was created: "not available for delivery to <country>", remove or mark the line */ }
+    else throw error;
 }
 
 // 3. From your success page's route handler: the truth is core's, not the browser's.
-const { orderStatus } = await getOrderStatus(core, order.externalSource, order.externalRef); // 'PAID' once the webhook landed
+const { orderStatus } = await getOrderStatus(core, order.externalSource, order.externalRef);
+switch (checkoutStatusOutcome(orderStatus)) {
+    case 'paid':    // the webhook landed: done
+    case 'expired': // EXPIRED or CANCELLED — can never be paid: stop polling, send the buyer to the cart
+    case 'pending': // keep polling (every ~2 s, for about a minute, then "still confirming — reload")
+}
 ```
 
-**Elements in deferred mode.** There is no `clientSecret` before "Pay", so mount Elements from the
-preview: `loadStripe(preview.publishableKey)` and
+**One open checkout per buyer email per shop.** `(externalSource, externalRef)` is the order's
+identity for a *resubmit*: send the same reference and the full current payload after `goBack()`,
+and core re-opens the same order (same number) with the new lines, addresses and email — a declined
+card retried with another card, or a corrected address, never produces a second order or charge. A
+cart that changed under a **new** reference replaces the email's open, unpaid order in place instead
+of leaving it behind. Mint a reference once per cart, a new one when the cart changes.
+
+**Thirty minutes.** Core expires a checkout the buyer has not submitted again for thirty minutes
+(status `EXPIRED`): the invoice is voided at Stripe, and an automation rule in the ERP can mail the
+buyer. A submit under that reference answers 409 `CHECKOUT_EXPIRED` (`checkoutExpiredOf`): mint a
+new reference, tell the buyer the reservation lapsed, send the checkout again. A Stripe error on
+"Pay" that is not a `card_error` or `validation_error` (a voided invoice, an unexpected intent state)
+is handled the same way: back to step 1, resubmit. While the email's open payment is still being
+processed (an asynchronous method), a new cart is refused with 409 `CHECKOUT_PAYMENT_IN_PROGRESS`
+(`checkoutPaymentInProgressOf`); nothing was created.
+
+**Elements in deferred mode** is for a shop that must show the card form before any order exists:
+mount Elements from the preview — `loadStripe(preview.publishableKey)` and
 `<Elements options={{ mode: 'payment', amount: Math.round(preview.amount * 100), currency: preview.currency }}>`
-(`amount` in minor units). On "Pay" call `elements.submit()`, then `startCheckout`, then
-`stripe.confirmPayment({ elements, clientSecret, ... })`. The publishable key follows the currency,
-so it can differ between a CHF and a EUR cart.
+(`amount` in minor units) — and on "Pay" call `elements.submit()`, then `startCheckout`, then
+`stripe.confirmPayment({ elements, clientSecret, ... })`. A checkout opened this way is created on
+"Pay", so the ERP never sees an abandoned one. The publishable key follows the currency, so it can
+differ between a CHF and a EUR cart.
 
 The preview's order fields (`orderId`, `clientSecret`, `invoiceId`, ...) are all `null` and
 `preview` is `true`. It is validated and refused like `startCheckout` — same endpoint, so
@@ -97,19 +126,13 @@ the real checkout will carry; only the country is required. A Stripe rejection o
 
 The preview refuses a line no distributor routed to the buyer's country can ship exactly as the
 checkout does (409 `SHOP_PRODUCT_NOT_AVAILABLE`, read with `productUnavailableOf`), so the shop
-learns it before "Pay". `country` is `null` when the order named no country. A resumed checkout is
-not checked again: its stock was decided when the order was created.
+learns it before the buyer leaves step 1. `country` is `null` when the order named no country. A
+resumed checkout is not checked again: its stock was decided when the order was created.
 
 Core, not the shop, holds the Stripe secret key, receives the webhook, marks the order paid and
 mails the buyer. The shop keeps only `@stripe/stripe-js` / `@stripe/react-stripe-js`, and
 `returnUrl` must sit on the shop URL (or an allowed extra origin) configured in core's payment
 settings.
-
-`(externalSource, externalRef)` is the order's identity: mint `externalRef` once per cart state and
-reuse it for a retry with another card — core resumes the same order and invoice and **ignores the
-new payload**, so a declined card never produces a second charge. A resumed attempt is checked
-against `expectedAmount` too. A changed cart or address needs a new reference (the old order stays
-`PENDING_PAYMENT`). Sending a pair whose invoice is already paid is refused.
 
 ### The form under a phone keyboard
 
@@ -147,8 +170,9 @@ viewport, behind the keyboard — a fixed bottom bar stays out of the way.
 
 A subscription is sold through core the way an order is: core owns the plan, the delivery schedule
 and the deliveries, Stripe bills each period **in advance**. The shop lists what core lists, lets
-the buyer choose a delivery rhythm, previews the first charge and starts the checkout on
-"Subscribe". Needs a core release with the subscription checkout.
+the buyer choose a delivery rhythm, previews the first charge and opens the checkout when the buyer
+leaves step 1 (the same two steps as an order; "Subscribe" only confirms). Needs a core release with
+the subscription checkout.
 
 ```typescript
 // server side — route handlers
@@ -194,11 +218,13 @@ try {
     // SUBSCRIPTION_AMOUNT_CHANGED → preview again, show refusal.amount; SUBSCRIPTION_CHECKOUT_EXPIRED and
     // SUBSCRIPTION_CHECKOUT_CHANGED → start over with a NEW cart.id; SUBSCRIPTION_ALREADY_ACTIVE → it went through: show success;
     // SUBSCRIPTION_PLAN_NOT_AVAILABLE → not available for delivery to refusal.country;
-    // SUBSCRIPTION_START_DATE_INVALID → refusal.earliest; TOO_MANY_REQUESTS → wait, then try again
+    // SUBSCRIPTION_START_DATE_INVALID → refusal.earliest; TOO_MANY_REQUESTS → wait, then try again;
+    // CHECKOUT_PAYMENT_IN_PROGRESS → a payment for this email is still processing, let the buyer retry in a minute
 }
 
 // the return page: core's word, not the browser's. Status reads are limited to 60 a minute per visitor: poll every ~3 s, for at
-// most 2 minutes, and stop on a final status.
+// most 2 minutes, and stop on a final status: ACTIVE (done), CANCELLED or EXPIRED (can never be paid — say the reservation
+// lapsed, rotate the cart reference, link to the cart).
 const { status, firstPaymentStatus } = await getSubscriptionStatus(core, 'flora', externalRef, visitor);
 ```
 
@@ -227,11 +253,14 @@ Core sends the currency upper-case (`CHF`); Stripe wants it lower-case.
   it appends a fingerprint of the terms to your cart reference (at most `MAX_CART_REF_LENGTH`
   characters). `configuration` counts as the exact string core stores — build the object the same
   way each time. With the helper, a 409 `SUBSCRIPTION_CHECKOUT_CHANGED` means the plan itself changed
-  in core: deriving again gives the same reference, so the cart needs a new `cartRef`. Stripe drops
-  an unpaid checkout after 23 hours; its reference is then spent (409 `SUBSCRIPTION_CHECKOUT_EXPIRED`)
-  and the cart needs a new `cartRef` too. Core also cancels a row its post-create check finds at
-  another amount than `expectedAmount`: the same reference then gets `SUBSCRIPTION_CHECKOUT_EXPIRED`.
-  `SUBSCRIPTION_ALREADY_ACTIVE` is the opposite: the reference became a subscription, show success.
+  in core: deriving again gives the same reference, so the cart needs a new `cartRef`. Core expires
+  an unpaid checkout thirty minutes after the buyer last submitted it (status `EXPIRED`, the Stripe
+  subscription cancelled); its reference is then spent (409 `SUBSCRIPTION_CHECKOUT_EXPIRED`) and the
+  cart needs a new `cartRef`. The same answer comes for a row Stripe dropped or core cancelled after
+  its post-create amount check. `SUBSCRIPTION_ALREADY_ACTIVE` is the opposite: the reference became
+  a subscription, show success. **One open checkout per buyer email:** a changed cart under a new
+  reference replaces the email's open `INCOMPLETE` subscription in place (same number), and while the
+  email's first payment is still processing a new cart is refused with 409 `CHECKOUT_PAYMENT_IN_PROGRESS`.
 - **Refusals a buyer can hit at run time**, all read by `subscriptionCheckoutRefusalOf`: 400
   `SUBSCRIPTION_DYNAMIC_DISABLED` (core offers no dynamic entry), 404 `SHOP_SUBSCRIPTION_PLAN_NOT_FOUND`
   (the plan was unlisted or archived since you read the catalog), 400 `SUBSCRIPTION_START_DATE_NOT_ALLOWED`
