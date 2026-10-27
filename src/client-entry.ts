@@ -12,6 +12,8 @@ export type {
     FulfilmentOptions,
     PickupFulfilment,
 } from './order/order-details.js';
+export { checkoutStatusOutcome } from './checkout/checkout-status.js';
+export type { CheckoutOutcome } from './checkout/checkout-status.js';
 export { isHoliday } from './shop/holidays-client.js';
 export type { HolidayRange } from './shop/holidays-client.js';
 export type { PickupSite } from './shop/pickup-site-client.js';

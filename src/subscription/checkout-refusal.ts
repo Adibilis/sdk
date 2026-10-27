@@ -12,8 +12,13 @@ export type SubscriptionCheckoutRefusal =
      * means the plan changed in core and deriving again gives the same reference: start over with a NEW `cartRef`.
      */
     | { code: 'SUBSCRIPTION_CHECKOUT_CHANGED' }
-    /** The unpaid checkout behind this reference was dropped (by Stripe, or cancelled by core) and can never be paid. Start over with a NEW `cartRef`. */
+    /**
+     * The unpaid checkout behind this reference was dropped (expired by core thirty minutes after the buyer last submitted it,
+     * dropped by Stripe, or cancelled) and can never be paid. Start over with a NEW `cartRef`.
+     */
     | { code: 'SUBSCRIPTION_CHECKOUT_EXPIRED' }
+    /** 409: a payment for this buyer email is still being processed; nothing was created. Let the buyer try again in a minute. */
+    | { code: 'CHECKOUT_PAYMENT_IN_PROGRESS' }
     /**
      * 409: the plan's first delivery cannot be served to this delivery country (a product core sells "stop at 0" is out of stock
      * there); nothing was created, the preview refuses the same way. `country` is null when core had no country to route by.
@@ -59,6 +64,7 @@ export function subscriptionCheckoutRefusalOf(error: unknown): SubscriptionCheck
         }
         if ('SUBSCRIPTION_CHECKOUT_CHANGED' in errorList) return { code: 'SUBSCRIPTION_CHECKOUT_CHANGED' };
         if ('SUBSCRIPTION_CHECKOUT_EXPIRED' in errorList) return { code: 'SUBSCRIPTION_CHECKOUT_EXPIRED' };
+        if ('CHECKOUT_PAYMENT_IN_PROGRESS' in errorList) return { code: 'CHECKOUT_PAYMENT_IN_PROGRESS' };
         const unavailable = planUnavailableOf(errorList);
         if (unavailable !== null) return { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ...unavailable };
     }

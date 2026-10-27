@@ -69,6 +69,7 @@ describe('subscriptionCheckoutRefusalOf', () => {
         ['the new amount', listed(409, 'SUBSCRIPTION_AMOUNT_CHANGED', ['51.30']), { code: 'SUBSCRIPTION_AMOUNT_CHANGED', amount: 51.3 }],
         ['changed terms', listed(409, 'SUBSCRIPTION_CHECKOUT_CHANGED'), { code: 'SUBSCRIPTION_CHECKOUT_CHANGED' }],
         ['an expired checkout', listed(409, 'SUBSCRIPTION_CHECKOUT_EXPIRED'), { code: 'SUBSCRIPTION_CHECKOUT_EXPIRED' }],
+        ['a payment in progress', listed(409, 'CHECKOUT_PAYMENT_IN_PROGRESS'), { code: 'CHECKOUT_PAYMENT_IN_PROGRESS' }],
         [
             'a plan out of stock for the country',
             listed(409, 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ['7', 'DE']),

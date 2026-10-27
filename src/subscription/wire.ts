@@ -11,7 +11,7 @@ export type { CorrespondenceLanguage, FulfillmentType, PageResponse, PaymentStat
 
 export type BillingInterval = 'WEEK' | 'MONTH' | 'YEAR';
 export type Weekday = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
-export type SubscriptionStatus = 'INCOMPLETE' | 'ACTIVE' | 'PAST_DUE' | 'PAUSED' | 'CANCELLED';
+export type SubscriptionStatus = 'INCOMPLETE' | 'ACTIVE' | 'PAST_DUE' | 'PAUSED' | 'CANCELLED' | 'EXPIRED';
 export type SubscriptionSecretKind = 'PAYMENT' | 'SETUP';
 
 export const SchedulePatternModel = z.object({

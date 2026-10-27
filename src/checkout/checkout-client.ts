@@ -14,7 +14,8 @@ export type CheckoutStartRequest = Omit<CheckoutRequest, 'preview'> & {
 /**
  * What a preview answers: the totals of a checkout that was never created. Every order field is
  * `null` — there is no order, invoice or client secret yet. `publishableKey` is the Stripe account
- * the currency routes to, which is what Elements in deferred mode needs before any order exists.
+ * the currency routes to (a shop that must show the card form before any order exists mounts
+ * Elements in deferred mode from it; see the README).
  */
 export interface CheckoutPreview {
     orderId: null;
@@ -40,11 +41,23 @@ export interface CheckoutPreview {
  * browser needs to take the payment — `clientSecret` and `publishableKey` — and nothing it must
  * not have; the WEBSITE key stays on this side.
  *
- * Core is idempotent on `(order.externalSource, order.externalRef)`: sending the same pair again
- * resumes the existing order and its invoice — the new `order` payload is ignored, the stored one
- * is what gets paid — so a declined card followed by a retry never creates a second charge, and a
- * pair whose invoice is already paid is refused. Mint the reference once per cart, and mint a new
- * one when the cart changes.
+ * Call it when the buyer leaves step 1 of the checkout, not on "Pay". What `(order.externalSource,
+ * order.externalRef)` and the billing email then mean to core:
+ *
+ * - **Same reference, same email** — a retry: the stored order and its invoice are resumed (after
+ *   a declined card the new payload is ignored entirely; before any attempt only the addresses,
+ *   fulfilment and pickup site refresh and the stored lines are re-priced). A pair whose invoice is
+ *   already paid is refused. So keep the reference for a retry, and mint a **new** one whenever
+ *   lines, quantities, dates or notes changed.
+ * - **Same reference, corrected email** — the order is re-bound to the new email with the full
+ *   payload (unless a payment is already moving: then it resumes as a retry).
+ * - **New reference, same email** — core replaces that email's open, unpaid order in place (same
+ *   order number, old invoice voided) with the full payload; nothing is left behind.
+ * - A reference of an order core expired or cancelled is 409 `CHECKOUT_EXPIRED`
+ *   (`checkoutExpiredOf`): mint a new one. While the email's payment is still processing a new
+ *   cart is 409 `CHECKOUT_PAYMENT_IN_PROGRESS` (`checkoutPaymentInProgressOf`).
+ *
+ * Core expires a checkout thirty minutes after its last submit (status `EXPIRED`).
  *
  * The payload is checked against the generated schema before it leaves the process, so most
  * structural mistakes surface as a `ZodError` here rather than a 400 round-trip. The schema is a
@@ -69,9 +82,10 @@ export async function startCheckout(client: AdibilisClient, request: CheckoutSta
 
 /**
  * Prices the cart exactly as `startCheckout` would invoice it and creates nothing: no order, no
- * contact, no Stripe customer or invoice. Show `amount` as the total, mount Elements in deferred
- * mode with `publishableKey`, `amount` (in minor units) and `currency`, and only on "Pay" call
- * `startCheckout` with `expectedAmount: preview.amount`.
+ * contact, no Stripe customer or invoice. Show `amount` as the total on step 1 and call
+ * `startCheckout` with `expectedAmount: preview.amount` when the buyer leaves it. (A shop that must
+ * show the card form before any order exists mounts Elements in deferred mode with `publishableKey`,
+ * `amount` in minor units and `currency`, and starts the checkout on "Pay" instead; see the README.)
  *
  * Validated and refused like `startCheckout` (same endpoint, same payload), so `returnUrl` is
  * required here too. With automatic tax on, the order's delivery address decides the tax, or the
@@ -101,6 +115,31 @@ export interface ProductUnavailable {
     productId: number;
     /** Upper-case ISO code, or `null` when the order named no country and core's catch-all decided. */
     country: string | null;
+}
+
+function refusedWith(error: unknown, code: string): boolean {
+    if (!(error instanceof AdibilisApiError) || error.status !== 409) return false;
+    const errorList = (error.body as { errorList?: Record<string, unknown> } | null)?.errorList;
+    return errorList != null && typeof errorList === 'object' && code in errorList;
+}
+
+/**
+ * True when `error` is core's refusal of a checkout whose reference names an order core has
+ * expired or cancelled (409 `CHECKOUT_EXPIRED`): core expires an untouched checkout thirty minutes
+ * after the buyer last submitted it. Nothing can be paid under that reference any more — mint a
+ * new one, tell the buyer the reservation lapsed and send the checkout again.
+ */
+export function checkoutExpiredOf(error: unknown): boolean {
+    return refusedWith(error, 'CHECKOUT_EXPIRED');
+}
+
+/**
+ * True when `error` is core's refusal of a new checkout while a payment for the same buyer email is
+ * still being processed (409 `CHECKOUT_PAYMENT_IN_PROGRESS`). Nothing was created; show it and let
+ * the buyer try again in a minute — the open payment either settles or fails by then.
+ */
+export function checkoutPaymentInProgressOf(error: unknown): boolean {
+    return refusedWith(error, 'CHECKOUT_PAYMENT_IN_PROGRESS');
 }
 
 /**

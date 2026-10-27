@@ -104,4 +104,32 @@ describe('CheckoutProvider', () => {
         expect(proceed).not.toHaveBeenCalled();
         expect(result.current.proceedToPayment).toBe(proceed);
     });
+
+    it('goBack returns to customer_info and drops the stripe settings', () => {
+        const { result } = renderHook(() => useCheckout(), { wrapper });
+        act(() => {
+            result.current.setStripe({ publishableKey: 'pk', clientSecret: 'cs' });
+            result.current.setFormState({ isProcessing: false, isReady: true, step: 'payment' });
+        });
+
+        act(() => result.current.goBack());
+
+        expect(result.current.formState).toEqual({ isProcessing: false, isReady: false, step: 'customer_info' });
+        expect(result.current.stripe).toBeNull();
+    });
+
+    it('goBack keeps the registered handlers and the tax breakdown', () => {
+        const proceed = vi.fn();
+        const breakdown = { subtotal: 10, tax: 0.81, total: 10.81, taxRate: 8.1, currency: 'chf' };
+        const { result } = renderHook(() => useCheckout(), { wrapper });
+        act(() => {
+            result.current.setProceedToPayment(proceed);
+            result.current.setTaxBreakdown(breakdown);
+        });
+
+        act(() => result.current.goBack());
+
+        expect(result.current.proceedToPayment).toBe(proceed);
+        expect(result.current.taxBreakdown).toBe(breakdown);
+    });
 });

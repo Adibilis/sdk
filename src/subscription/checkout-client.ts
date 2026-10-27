@@ -191,7 +191,9 @@ export async function startSubscriptionCheckout(
 /**
  * The subscription behind a shop reference, for the return page. While core still says `INCOMPLETE`, `firstPaymentStatus`
  * follows Stripe live: `SUCCEEDED` once the first charge went through, with or without a start date. `status` turns `ACTIVE` only
- * when core's webhook lands. **404** `SUBSCRIPTION_NOT_FOUND` for an unknown reference.
+ * when core's webhook lands. `EXPIRED` means core gave the unpaid checkout up thirty minutes after the buyer last submitted it:
+ * stop polling, say the reservation lapsed and start over with a new `cartRef`. **404** `SUBSCRIPTION_NOT_FOUND` for an unknown
+ * reference.
  *
  * A start-date subscription reports `stripeStatus` `"trialing"` until its second charge: Stripe's trial only defers that charge,
  * the first cycle is paid. A start-date checkout opened by a core release before 1.9.7 is the exception: its `SUCCEEDED` means

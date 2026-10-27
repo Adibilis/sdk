@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import { AdibilisApiError } from '../src/client/errors';
-import { amountChangedOf, getOrderStatus, previewCheckout, productUnavailableOf, startCheckout } from '../src/checkout/checkout-client';
+import {
+    amountChangedOf,
+    checkoutExpiredOf,
+    checkoutPaymentInProgressOf,
+    getOrderStatus,
+    previewCheckout,
+    productUnavailableOf,
+    startCheckout,
+} from '../src/checkout/checkout-client';
 
 const order = {
     externalRef: 'cart-7f3a',
@@ -137,6 +145,38 @@ describe('amountChangedOf', () => {
         ['a non-error', null],
     ])('returns null for %s', (_name, error) => {
         expect(amountChangedOf(error)).toBeNull();
+    });
+});
+
+describe('checkoutExpiredOf', () => {
+    const refusal = (status: number, errorList: unknown) =>
+        new AdibilisApiError(status, { error: 'x', errorList, url: '/api/payment/checkout' }, '/api/payment/checkout');
+
+    it('is true for a 409 CHECKOUT_EXPIRED', () => {
+        expect(checkoutExpiredOf(refusal(409, { CHECKOUT_EXPIRED: [] }))).toBe(true);
+    });
+
+    it.each([
+        ['another status', refusal(400, { CHECKOUT_EXPIRED: [] })],
+        ['another key', refusal(409, { CHECKOUT_AMOUNT_CHANGED: ['1'] })],
+        ['a body without errorList', new AdibilisApiError(409, 'conflict', '/p')],
+        ['a foreign error', new Error('boom')],
+        ['a non-error', null],
+    ])('is false for %s', (_name, error) => {
+        expect(checkoutExpiredOf(error)).toBe(false);
+    });
+});
+
+describe('checkoutPaymentInProgressOf', () => {
+    const refusal = (status: number, errorList: unknown) =>
+        new AdibilisApiError(status, { error: 'x', errorList, url: '/api/payment/checkout' }, '/api/payment/checkout');
+
+    it('is true for a 409 CHECKOUT_PAYMENT_IN_PROGRESS', () => {
+        expect(checkoutPaymentInProgressOf(refusal(409, { CHECKOUT_PAYMENT_IN_PROGRESS: [] }))).toBe(true);
+    });
+
+    it('is false for CHECKOUT_EXPIRED', () => {
+        expect(checkoutPaymentInProgressOf(refusal(409, { CHECKOUT_EXPIRED: [] }))).toBe(false);
     });
 });
 
