@@ -44,7 +44,7 @@ export interface CheckoutContextValue {
     /**
      * Step 2 → step 1: drops the Stripe settings and the ready flag, keeps the tax breakdown and the
      * registered handlers. The shop keeps its form values (a `FormProvider` mounted above both steps)
-     * and resubmits with the same reference — core treats that as the same checkout.
+     * and resubmits: the same reference for a retry or a corrected email, a new one for any other change.
      */
     goBack: () => void;
     onSuccess: () => void;
@@ -62,10 +62,11 @@ const INITIAL_FORM_STATE: FormState = { isProcessing: false, isReady: false, ste
  *    exists in core from this moment — and answers `publishableKey` + `clientSecret`.
  * 2. The shop calls `setStripe({ publishableKey, clientSecret })` and moves to `step: 'payment'`.
  *    Step 2 mounts the Payment Element in client-secret mode; step 1 is unmounted, not hidden.
- * 3. Editing is `goBack()` and a resubmit under the same reference: core re-opens the same checkout
- *    with the new payload. A changed cart under a new reference replaces the buyer email's open
- *    checkout in place. Core expires an untouched checkout thirty minutes after the last submit; the
- *    next submit then answers 409 `CHECKOUT_EXPIRED` (`checkoutExpiredOf`) — mint a new reference.
+ * 3. Editing is `goBack()` and a resubmit. Keep the reference for a plain retry and for a corrected
+ *    email (core re-binds the order); mint a new one when anything else changed — core then replaces
+ *    the buyer email's open checkout in place (same number). Core expires an untouched checkout
+ *    thirty minutes after the last submit; the next submit then answers 409 `CHECKOUT_EXPIRED`
+ *    (`checkoutExpiredOf`) — mint a new reference.
  * 4. "Pay" only confirms. The success page decides with `checkoutStatusOutcome`.
  */
 export function CheckoutProvider({ children, onSuccess }: { children: ReactNode; onSuccess: () => void }) {

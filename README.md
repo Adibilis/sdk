@@ -76,7 +76,7 @@ try {
 } catch (error) {
     if (checkoutExpiredOf(error)) { /* the reference names an expired order: mint a new one, say the reservation lapsed, back to step 1 */ }
     else if (checkoutPaymentInProgressOf(error)) { /* a payment for this email is still processing: say so, let the buyer retry in a minute */ }
-    else if (amountChangedOf(error) !== null) { /* core voided the invoice: preview again, show the new amount, back to step 1 */ }
+    else if (amountChangedOf(error) !== null) { /* core voided the invoice: preview again, show the new amount, back to step 1 under a NEW reference */ }
     else if (productUnavailableOf(error) !== null) { /* nothing was created: "not available for delivery to <country>", remove or mark the line */ }
     else throw error;
 }
@@ -90,12 +90,20 @@ switch (checkoutStatusOutcome(orderStatus)) {
 }
 ```
 
-**One open checkout per buyer email per shop.** `(externalSource, externalRef)` is the order's
-identity for a *resubmit*: send the same reference and the full current payload after `goBack()`,
-and core re-opens the same order (same number) with the new lines, addresses and email — a declined
-card retried with another card, or a corrected address, never produces a second order or charge. A
-cart that changed under a **new** reference replaces the email's open, unpaid order in place instead
-of leaving it behind. Mint a reference once per cart, a new one when the cart changes.
+**One open checkout per buyer email per shop.** What `(externalSource, externalRef)` and the
+billing email mean to core on a resubmit after `goBack()`:
+
+| the shop sends | core does |
+|---|---|
+| the same reference, the same email | a **retry**: the stored order and invoice are resumed. After a declined card the new payload is ignored; before any attempt only the addresses, fulfilment and pickup site refresh and the stored lines are re-priced. Lines, quantities, dates and notes are **not** applied. |
+| the same reference, a corrected email | the order is **re-bound** to the new email with the full payload (unless a payment is already moving: a retry). |
+| a new reference, the same email | that email's open, unpaid order is **replaced in place** — same order number, old invoice voided — with the full payload. Nothing is left behind to expire. |
+
+So the rule for the shop: keep the reference for a plain retry (another card) and for a corrected
+email; mint a **new** one whenever anything else in the payload changed (codonis-shop derives it from
+a fingerprint of the payload without the email). A declined card retried with another card never
+produces a second order or charge, and a changed cart never leaves an abandoned order behind. A 409
+`CHECKOUT_AMOUNT_CHANGED` also needs a new reference: retrying the old one re-invoices the old total.
 
 **Thirty minutes.** Core expires a checkout the buyer has not submitted again for thirty minutes
 (status `EXPIRED`): the invoice is voided at Stripe, and an automation rule in the ERP can mail the
