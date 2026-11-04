@@ -94,6 +94,8 @@ export {
     requestLoginLink,
 } from './customer/session.js';
 export type { CustomerLoginLinkRequest, CustomerSessionCookie, CustomerSignIn } from './customer/session.js';
+export { customerLanguage } from './customer/language.js';
+export type { CustomerLanguageSources } from './customer/language.js';
 export { customerFromCookies } from './customer/customer-client.js';
 export type { CookieReader, CustomerClient, CustomerPageOptions, CustomerTransactionQuery } from './customer/customer-client.js';
 export { SubscriptionUpdateError } from './customer/customer-client.js';

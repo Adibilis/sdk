@@ -34,6 +34,15 @@ const checkoutResponse = {
 };
 
 describe('startCheckout', () => {
+    it('sends the buyer language', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+        const billingPerson = { ...order.billingPerson, language: 'FR' } as const;
+
+        await startCheckout(client, { order: { ...order, billingPerson }, returnUrl: 'https://shop.example/checkout/return' });
+
+        expect(client.post.mock.calls[0][1]).toMatchObject({ order: { billingPerson: { language: 'FR' } } });
+    });
+
     it('posts the validated request to the checkout endpoint', async () => {
         const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
 

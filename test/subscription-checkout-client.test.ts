@@ -83,6 +83,16 @@ describe('previewSubscriptionCheckout', () => {
 });
 
 describe('startSubscriptionCheckout', () => {
+    it('sends the buyer language', async () => {
+        const client = mockClient();
+        client.post.mockResolvedValue(started);
+        const billingPerson = { ...request.billingPerson, language: 'IT' } as const;
+
+        await startSubscriptionCheckout(client, { ...request, billingPerson, expectedAmount: 49.8 }, visitor);
+
+        expect(client.post.mock.calls[0][1]).toMatchObject({ billingPerson: { language: 'IT' } });
+    });
+
     it('posts preview false with the amount the shop showed', async () => {
         const client = mockClient();
         client.post.mockResolvedValue(started);
