@@ -146,6 +146,22 @@ mails the buyer. The shop keeps only `@stripe/stripe-js` / `@stripe/react-stripe
 `returnUrl` must sit on the shop URL (or an allowed extra origin) configured in core's payment
 settings.
 
+### The buyer's document language
+
+Send `billingPerson.language` (`DE`, `FR`, `IT` or `EN`) on `startCheckout` and `startSubscriptionCheckout`. Core stores it as a
+new customer's document language, which their invoices and mails then use. A contact that already has a language keeps it, and a
+buyer without one falls back to core's default. `customerLanguage` picks the value: the language the site is shown in, else the
+browser's first language, else English.
+
+```typescript
+import { customerLanguage } from '@adbls/sdk/server';
+
+billingPerson.language = customerLanguage({
+    locale: activeLocale,                                 // the language picker's value, or the site's one fixed language
+    acceptLanguage: request.headers.get('accept-language'),
+});
+```
+
 ### The form under a phone keyboard
 
 Phones open the keyboard over the page without making the page any longer, so the last fields of

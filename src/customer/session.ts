@@ -2,16 +2,14 @@ import type { AdibilisClient } from '../client/api-client.js';
 import { shopCallHeaders } from '../subscription/checkout-client.js';
 import type { ShopCallOptions } from '../subscription/checkout-client.js';
 import { CustomerLoginLinkRequestModel, CustomerSessionRequestModel } from '../subscription/wire.js';
-import type { CorrespondenceLanguage, CustomerSessionResponse } from '../subscription/wire.js';
+import type { CustomerSessionResponse } from '../subscription/wire.js';
+import { languageOf } from './language.js';
 import type { CustomerProfile } from './types.js';
 
 /** The cookie that carries the customer's portal session; `customerFromCookies` reads it. */
 export const CUSTOMER_SESSION_COOKIE = '__Host-adbl_customer';
 /** Core refuses a longer session token without a lookup. */
 export const MAX_SESSION_TOKEN_LENGTH = 128;
-
-const LANGUAGES: readonly CorrespondenceLanguage[] = ['DE', 'FR', 'IT', 'EN'];
-const LOCALE = /^([a-z]{2})(?:[-_][a-z0-9_-]*)?$/i;
 
 export interface CustomerLoginLinkRequest {
     email: string;
@@ -41,11 +39,6 @@ export interface CustomerSignIn {
     expiresAt: string;
     /** Set it on the response, then redirect. It is the session — never send it anywhere else. */
     cookie: CustomerSessionCookie;
-}
-
-function languageOf(locale: string | null | undefined): CorrespondenceLanguage | null {
-    const code = LOCALE.exec(locale?.trim() ?? '')?.[1]?.toUpperCase();
-    return LANGUAGES.find((language) => language === code) ?? null;
 }
 
 function isWebUrl(value: string): boolean {
