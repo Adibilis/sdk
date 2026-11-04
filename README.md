@@ -151,7 +151,7 @@ settings.
 Send `billingPerson.language` (`DE`, `FR`, `IT` or `EN`) on `startCheckout` and `startSubscriptionCheckout`. Core stores it as a
 new customer's document language, which their invoices and mails then use. A contact that already has a language keeps it, and a
 buyer without one falls back to core's default. `customerLanguage` picks the value: the language the site is shown in, else the
-browser's first language, else English.
+browser's first language, else English. A core before 1.9.26 ignores the field.
 
 ```typescript
 import { customerLanguage } from '@adbls/sdk/server';
