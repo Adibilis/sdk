@@ -48,7 +48,7 @@ export type { PublishedReviewResponse, PublishedReviewsResponse } from './review
 export { subscribeNewsletter } from './shop/newsletter-client.js';
 export type { NewsletterLanguage, NewsletterSignupRequest } from './shop/newsletter-client.js';
 export { fetchShopProduct, fetchShopProducts } from './shop/product-client.js';
-export type { ProductPriceResponse, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
+export type { ProductPriceResponse, ShopProductReadOptions, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
 
 export type {
     DynamicSubscriptionEntry,
@@ -88,6 +88,7 @@ export type {
 } from './customer/types.js';
 export {
     CUSTOMER_SESSION_COOKIE,
+    customerSessionFromCookies,
     exchangeLoginToken,
     expiredCustomerSessionCookie,
     MAX_SESSION_TOKEN_LENGTH,
