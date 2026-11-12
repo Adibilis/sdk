@@ -58,7 +58,7 @@ describe('confirmMethodOf', () => {
     });
 });
 
-describe('SubscriptionCheckoutRequestModel (copy of core generator output)', () => {
+describe('SubscriptionCheckoutRequestModel (core generator output)', () => {
     it('accepts a dynamic checkout as the shop sends it', () => {
         const request = {
             dynamic: {
@@ -76,6 +76,30 @@ describe('SubscriptionCheckoutRequestModel (copy of core generator output)', () 
             externalRef: 'cart-1',
             returnUrl: 'https://shop.example/r',
             preview: true,
+        };
+        expect(SubscriptionCheckoutRequestModel.parse(request)).toEqual(request);
+    });
+
+    it('takes a discount code and a catalog and delivery line', () => {
+        const request = {
+            dynamic: {
+                unitAmount: 29.9,
+                vatRate: 2.6,
+                priceMode: 'BRUTTO',
+                lineItems: [
+                    { kind: 'PRODUCT_LINKED', productId: 12, quantity: 1, unitPrice: 24.9 },
+                    { kind: 'SERVICE', textHtml: 'Delivery', quantity: 1, unitPrice: 5, delivery: true },
+                ],
+            },
+            currency: 'CHF',
+            schedule: tueFri,
+            configurationText: 'Red bouquet',
+            billingPerson: { email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe' },
+            externalSource: 'flora',
+            externalRef: 'cart-1',
+            returnUrl: 'https://shop.example/r',
+            preview: true,
+            discountCode: 'SPRING',
         };
         expect(SubscriptionCheckoutRequestModel.parse(request)).toEqual(request);
     });

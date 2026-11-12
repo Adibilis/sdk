@@ -135,6 +135,109 @@ describe('startSubscriptionCheckout', () => {
     });
 });
 
+describe('discount codes, first and regular amount, and the customer session', () => {
+    const discounted = {
+        ...preview,
+        amount: 40,
+        firstAmount: 40,
+        regularAmount: 49.8,
+        discountedAmount: 40,
+        discountDuration: 'ONCE',
+        discountDurationMonths: null,
+        discountCode: 'SPRING',
+        discountCodeRefusal: null,
+    };
+
+    it('theStartSendsThePreviewsFirstCharge', async () => {
+        const client = mockClient();
+        client.post.mockResolvedValueOnce(discounted).mockResolvedValueOnce({ ...started, ...discounted, preview: false });
+
+        const shown = await previewSubscriptionCheckout(client, { ...request, discountCode: 'SPRING' }, visitor);
+        await startSubscriptionCheckout(client, { ...request, discountCode: 'SPRING', expectedAmount: shown.amount }, visitor);
+
+        expect(shown.amount).toBe(40);
+        expect(shown.regularAmount).toBe(49.8);
+        expect(client.post.mock.calls[0][1]).toMatchObject({ discountCode: 'SPRING', preview: true });
+        expect(client.post.mock.calls[1][1]).toMatchObject({ discountCode: 'SPRING', preview: false, expectedAmount: 40 });
+    });
+
+    it('returns the discount fields of a preview as core sent them', async () => {
+        const refused = { ...preview, firstAmount: 49.8, regularAmount: 49.8, discountCode: null, discountCodeRefusal: 'EXPIRED' };
+        const client = mockClient();
+        client.post.mockResolvedValue(refused);
+
+        const result = await previewSubscriptionCheckout(client, { ...request, discountCode: 'OLD' }, visitor);
+
+        expect(result.discountCodeRefusal).toBe('EXPIRED');
+        expect(result.firstAmount).toBe(49.8);
+        expect(result.discountDuration).toBeUndefined();
+    });
+
+    it('sends the customer session as a header and never caches', async () => {
+        const client = mockClient();
+        client.post.mockResolvedValue(started);
+
+        await previewSubscriptionCheckout(client, request, { ...visitor, customerSession: 'tok_1' });
+        await startSubscriptionCheckout(client, { ...request, expectedAmount: 49.8 }, { ...visitor, customerSession: 'tok_1' });
+
+        for (const call of client.post.mock.calls) {
+            expect(call[2]).toEqual({ headers: { 'X-Shop-Client-Ip': '203.0.113.7', 'X-Customer-Session': 'tok_1' }, cache: 'no-store' });
+        }
+    });
+
+    it.each([[undefined], [null], ['']])('sends a request identical to a guest\'s for the session %s', async (customerSession) => {
+        const client = mockClient();
+        client.post.mockResolvedValue(started);
+
+        await startSubscriptionCheckout(client, { ...request, expectedAmount: 49.8 }, { ...visitor, customerSession });
+
+        expect(client.post.mock.calls[0][2]).toEqual(visitorHeader);
+    });
+
+    it('keeps the session on the retry after a lost lock', async () => {
+        vi.useFakeTimers();
+        const client = mockClient();
+        client.post.mockRejectedValueOnce(refusal(409, 'CONCURRENT_UPDATE_CONFLICT')).mockResolvedValueOnce(started);
+
+        const pending = startSubscriptionCheckout(client, { ...request, expectedAmount: 49.8 }, { ...visitor, customerSession: 'tok_1' });
+        await vi.advanceTimersByTimeAsync(250);
+        await pending;
+
+        expect(client.post.mock.calls[1][2]).toMatchObject({ headers: { 'X-Customer-Session': 'tok_1' } });
+    });
+});
+
+describe('catalog and delivery lines in a dynamic cart', () => {
+    it.each([
+        ['a catalog line', { kind: 'PRODUCT_LINKED', productId: 12, quantity: 1, unitPrice: 24.9 }],
+        ['a catalog line without a kind', { productId: 12, quantity: 1, unitPrice: 24.9 }],
+        ['a delivery line', { kind: 'SERVICE', textHtml: 'Delivery', quantity: 1, unitPrice: 24.9, delivery: true }],
+    ])('passes %s the local check and sends it', async (_name, line) => {
+        const client = mockClient();
+        client.post.mockResolvedValue(preview);
+        const dynamic = { ...request.dynamic!, lineItems: [line] };
+
+        await previewSubscriptionCheckout(client, { ...request, dynamic }, visitor);
+
+        expect(client.post.mock.calls[0][1]).toMatchObject({ dynamic: { lineItems: [line] } });
+    });
+
+    it('still refuses a line of any other kind linked to a product', async () => {
+        const lines = [{ kind: 'EXTERNAL_PRODUCT', textHtml: 'Rose', quantity: 1, unitPrice: 24.9, productId: 12 }];
+        const client = mockClient();
+
+        await expect(previewSubscriptionCheckout(client, { ...request, dynamic: { ...request.dynamic!, lineItems: lines } }, visitor)).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it('still refuses a service line that is not a delivery', async () => {
+        const lines = [{ kind: 'SERVICE', textHtml: 'Wrapping', quantity: 1, unitPrice: 24.9 }];
+        const client = mockClient();
+
+        await expect(previewSubscriptionCheckout(client, { ...request, dynamic: { ...request.dynamic!, lineItems: lines } }, visitor)).rejects.toBeInstanceOf(ZodError);
+    });
+});
+
 describe('local checks, before any request', () => {
     const start = (changes: Record<string, unknown>) => {
         const client = mockClient();
@@ -164,14 +267,14 @@ describe('local checks, before any request', () => {
         expect(client.post).not.toHaveBeenCalled();
     });
 
-    it('refuses a line that is not an external product', async () => {
-        const lines = [{ kind: 'SERVICE', textHtml: 'Delivery', quantity: 1, unitPrice: 24.9 }];
+    it('refuses a note line', async () => {
+        const lines = [{ kind: 'NOTE', textHtml: 'Delivery', quantity: 1, unitPrice: 24.9 }];
         const { promise } = start({ dynamic: { ...request.dynamic, lineItems: lines } });
 
         await expect(promise).rejects.toBeInstanceOf(ZodError);
     });
 
-    it('refuses a line linked to a core product', async () => {
+    it('refuses a line linked to a core product that is not a catalog line', async () => {
         const lines = [{ kind: 'EXTERNAL_PRODUCT', textHtml: 'Rose', quantity: 1, unitPrice: 24.9, productId: 12 }];
         const { promise } = start({ dynamic: { ...request.dynamic, lineItems: lines } });
 

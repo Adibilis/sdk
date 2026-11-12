@@ -1,3 +1,4 @@
+import type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
 import type {
     BillingInterval,
     PaymentStatus,
@@ -7,6 +8,7 @@ import type {
     SubscriptionStatus,
 } from './wire.js';
 
+export type { DiscountDuration };
 export type {
     BillingInterval,
     PaymentStatus,
@@ -70,8 +72,22 @@ export function isDynamicEntry(entry: ShopSubscriptionEntry): entry is DynamicSu
 
 interface SubscriptionCheckoutAmounts {
     publishableKey: string;
-    /** What the first charge totals, major units. */
+    /** What the first charge totals, major units — the figure to send as `expectedAmount`. */
     amount: number;
+    /** The first charge again, under the name that pairs with `regularAmount`. */
+    firstAmount: number;
+    /** What every later period costs, major units; differs from `firstAmount` while a once-discount applies. Core's figure — never recompute it. */
+    regularAmount: number;
+    /** What a discount on the plan or the customer brings the price per period to, or absent. */
+    discountedAmount: number | null;
+    /** How long the discount runs, or absent without one. */
+    discountDuration: DiscountDuration | null;
+    /** The number of periods of a `REPEATING` discount, or absent. */
+    discountDurationMonths: number | null;
+    /** The code core applied, or absent. */
+    discountCode: string | null;
+    /** Why the code in the request was not applied (the preview is still a price, not an error), or absent. */
+    discountCodeRefusal: DiscountCodeRefusal | null;
     taxAmount: number;
     vatRate: number | null;
     /** Upper-case ISO code as core stores it (`CHF`); Stripe Elements wants it lower-case. */

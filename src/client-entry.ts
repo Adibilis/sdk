@@ -58,6 +58,7 @@ export type {
     CustomerProfile,
     CustomerSubscription,
     CustomerSubscriptionDetail,
+    CustomerSubscriptionDiscount,
     CustomerTransaction,
     CustomerTransactionKind,
     FulfillmentType,

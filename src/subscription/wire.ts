@@ -3,11 +3,38 @@
 // CustomerTransactionResponse: core fix/customer-portal-link-and-invoices 6712edb1a) because no
 // @adbls/api-types release carries them yet. The commit that raises that dependency to the core release with Plans 3–8
 // replaces this file with re-exports from @adbls/api-types; keep it a verbatim copy until then.
-import { OrderIngestLineItemRequestModel, OrderIngestPersonRequestModel } from '@adbls/api-types';
-import type { CorrespondenceLanguage, FulfillmentType, PageResponse, PaymentStatus, PriceMode } from '@adbls/api-types';
+// The checkout request and response and the portal subscription responses (the shapes the discounts change) already are
+// re-exports; the rest follows with that release.
+import { DynamicSubscriptionRequestModel, SubscriptionCheckoutRequestModel } from '@adbls/api-types';
+import type {
+    CorrespondenceLanguage,
+    CustomerSubscriptionDetailResponse,
+    CustomerSubscriptionDiscount,
+    CustomerSubscriptionResponse,
+    DynamicSubscriptionRequest,
+    FulfillmentType,
+    PageResponse,
+    PaymentStatus,
+    PriceMode,
+    SubscriptionCheckoutRequest,
+    SubscriptionCheckoutResponse,
+} from '@adbls/api-types';
 import { z } from 'zod';
 
-export type { CorrespondenceLanguage, FulfillmentType, PageResponse, PaymentStatus, PriceMode };
+export { DynamicSubscriptionRequestModel, SubscriptionCheckoutRequestModel };
+export type {
+    CorrespondenceLanguage,
+    CustomerSubscriptionDetailResponse,
+    CustomerSubscriptionDiscount,
+    CustomerSubscriptionResponse,
+    DynamicSubscriptionRequest,
+    FulfillmentType,
+    PageResponse,
+    PaymentStatus,
+    PriceMode,
+    SubscriptionCheckoutRequest,
+    SubscriptionCheckoutResponse,
+};
 
 export type BillingInterval = 'WEEK' | 'MONTH' | 'YEAR';
 export type Weekday = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
@@ -45,35 +72,6 @@ export const ScheduleDefinitionModel = z.object({
 });
 export type ScheduleDefinition = z.infer<typeof ScheduleDefinitionModel>;
 
-export const DynamicSubscriptionRequestModel = z.object({
-    unitAmount: z.number(),
-    vatRate: z.number(),
-    priceMode: z.enum(['BRUTTO', 'NETTO']),
-    lineItems: z.array(OrderIngestLineItemRequestModel).min(1).max(100),
-});
-export type DynamicSubscriptionRequest = z.infer<typeof DynamicSubscriptionRequestModel>;
-
-export const SubscriptionCheckoutRequestModel = z.object({
-    planId: z.number().int().optional().nullable(),
-    dynamic: DynamicSubscriptionRequestModel.optional().nullable(),
-    currency: z.string().regex(/\S/).min(0).max(3),
-    schedule: SchedulePatternModel,
-    configuration: z.string().min(0).max(8192).optional().nullable(),
-    configurationText: z.string().regex(/\S/).min(0).max(500),
-    billingPerson: OrderIngestPersonRequestModel,
-    deliveryPerson: OrderIngestPersonRequestModel.optional().nullable(),
-    fulfillmentType: z.enum(['DELIVERY', 'PICKUP', 'DIGITAL', 'ON_SITE']).optional().nullable(),
-    pickupSiteId: z.number().int().optional().nullable(),
-    customerNote: z.string().min(0).max(2000).optional().nullable(),
-    startDate: z.string().optional().nullable(),
-    externalSource: z.string().regex(/\S/).min(0).max(40),
-    externalRef: z.string().regex(/\S/).min(0).max(120),
-    returnUrl: z.string().regex(/\S/),
-    preview: z.boolean(),
-    expectedAmount: z.number().optional().nullable(),
-});
-export type SubscriptionCheckoutRequest = z.infer<typeof SubscriptionCheckoutRequestModel>;
-
 export interface SubscriptionPlanPriceResponse {
     currency: string;
     amount: number;
@@ -93,24 +91,6 @@ export interface ShopSubscriptionPlanResponse {
     allowStartDateChoice: boolean;
     scheduleDefinition: ScheduleDefinition;
     prices: SubscriptionPlanPriceResponse[];
-}
-
-export interface SubscriptionCheckoutResponse {
-    subscriptionId?: number;
-    number?: string;
-    status?: SubscriptionStatus;
-    clientSecret?: string;
-    secretKind?: SubscriptionSecretKind;
-    publishableKey: string;
-    amount: number;
-    taxAmount: number;
-    vatRate?: number;
-    currency: string;
-    billingInterval: BillingInterval;
-    billingIntervalCount: number;
-    firstDeliveryAt: string;
-    nextBillingAt?: string;
-    preview: boolean;
 }
 
 export interface SubscriptionStatusResponse {
@@ -261,52 +241,4 @@ export interface CustomerTransactionResponse {
     currency: string;
     invoiceId?: number;
     invoiceNumber?: string;
-}
-
-export interface CustomerSubscriptionResponse {
-    id: number;
-    number: string;
-    status: SubscriptionStatus;
-    dynamic: boolean;
-    planTitle?: string;
-    configurationText: string;
-    amount: number;
-    currency: string;
-    billingInterval: BillingInterval;
-    billingIntervalCount: number;
-    nextDeliveryAt?: string;
-    nextBillingAt?: string;
-    cancelAtPeriodEnd: boolean;
-    pausedUntil?: string;
-    startDate?: string;
-}
-
-export interface CustomerSubscriptionDetailResponse {
-    id: number;
-    number: string;
-    status: SubscriptionStatus;
-    dynamic: boolean;
-    plan?: CustomerPlanResponse;
-    scheduleDefinition?: ScheduleDefinition;
-    schedule: SchedulePattern;
-    configuration?: string;
-    configurationText: string;
-    unitAmount?: number;
-    amount: number;
-    currency: string;
-    billingInterval: BillingInterval;
-    billingIntervalCount: number;
-    fulfillmentType?: FulfillmentType;
-    leadTimeDays: number;
-    deliveryPerson?: CustomerAddressResponse;
-    currentPeriodStart?: string;
-    currentPeriodEnd?: string;
-    nextBillingAt?: string;
-    nextDeliveryAt?: string;
-    cancelAtPeriodEnd: boolean;
-    pausedUntil?: string;
-    startDate?: string;
-    cancelledAt?: string;
-    upcomingDeliveries: CustomerDeliveryResponse[];
-    paymentMethod?: CustomerPaymentMethodResponse;
 }

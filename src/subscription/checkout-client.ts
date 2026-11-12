@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { AdibilisClient } from '../client/api-client.js';
 import { AdibilisApiError } from '../client/errors.js';
+import { customerSessionInit } from '../customer/session.js';
 import { compareDecimal, formatDecimal, parseDecimal, roundHalfUp } from './decimal.js';
 import { dynamicUnitAmount } from './pricing.js';
 import { isIsoDate, isWellFormedPattern } from './schedule.js';
@@ -22,6 +23,11 @@ export type SubscriptionCheckoutStartRequest = SubscriptionCheckoutRequest & { e
 export interface ShopCallOptions {
     /** The visitor's IP address as your server saw it: core rate-limits checkouts and status reads per visitor with it. */
     clientIp: string;
+}
+
+export interface SubscriptionCheckoutCallOptions extends ShopCallOptions {
+    /** The signed-in customer's portal session (`customerSessionFromCookies`): core prices the checkout for this customer. Without one the call is exactly as for a guest. */
+    customerSession?: string | null;
 }
 
 export const SHOP_CLIENT_IP_HEADER = 'X-Shop-Client-Ip';
@@ -77,6 +83,11 @@ function initOf(options: ShopCallOptions): { headers: Record<string, string> } {
     return { headers: shopCallHeaders(options) };
 }
 
+function checkoutInitOf(options: SubscriptionCheckoutCallOptions): { headers: Record<string, string>; cache?: 'no-store' } {
+    const { headers, ...rest } = customerSessionInit(options.customerSession);
+    return { headers: { ...shopCallHeaders(options), ...headers }, ...rest };
+}
+
 export function isJsonObject(text: string): boolean {
     try {
         const value: unknown = JSON.parse(text);
@@ -105,6 +116,11 @@ function checkTerms(request: WireCheckoutRequest, ctx: z.RefinementCtx): void {
     }
 }
 
+function isRepeatableLine(line: DynamicSubscriptionRequest['lineItems'][number]): boolean {
+    if (line.productId != null) return line.kind == null || line.kind === 'PRODUCT_LINKED';
+    return line.delivery === true || line.kind == null || line.kind === 'EXTERNAL_PRODUCT';
+}
+
 function checkDynamic(dynamic: DynamicSubscriptionRequest, ctx: z.RefinementCtx): void {
     if (compareDecimal(parseDecimal(dynamic.unitAmount), MIN_UNIT_AMOUNT) < 0) {
         ctx.addIssue({ code: 'custom', path: ['dynamic', 'unitAmount'], message: 'unitAmount must be at least 0.01' });
@@ -114,8 +130,12 @@ function checkDynamic(dynamic: DynamicSubscriptionRequest, ctx: z.RefinementCtx)
         ctx.addIssue({ code: 'custom', path: ['dynamic', 'vatRate'], message: 'vatRate must be a percentage from 0 to 100 with at most two decimals' });
     }
     dynamic.lineItems.forEach((line, index) => {
-        if (line.productId != null || (line.kind != null && line.kind !== 'EXTERNAL_PRODUCT')) {
-            ctx.addIssue({ code: 'custom', path: ['dynamic', 'lineItems', index], message: 'A dynamic subscription repeats EXTERNAL_PRODUCT lines without a productId only' });
+        if (!isRepeatableLine(line)) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['dynamic', 'lineItems', index],
+                message: 'A dynamic subscription repeats catalog lines (a productId, kind PRODUCT_LINKED), delivery lines and EXTERNAL_PRODUCT lines without a productId only',
+            });
         }
     });
     const unit = formatDecimal(roundHalfUp(parseDecimal(dynamic.unitAmount), 2));
@@ -149,14 +169,16 @@ function isRetryableConflict(error: unknown): boolean {
 /**
  * Prices a subscription checkout exactly as `startSubscriptionCheckout` would charge its first period, and creates nothing.
  * Show `amount` (and `describeBilling(billingInterval, billingIntervalCount)`), mount Stripe Elements with `publishableKey`,
- * then start with `expectedAmount: preview.amount`. Validated and refused like the real checkout.
+ * then start with `expectedAmount: preview.amount`. Validated and refused like the real checkout. With a `discountCode` or a
+ * discount of the signed-in customer (`customerSession`), `amount` is the first charge and `regularAmount` what every later period
+ * costs; a code core could not apply comes back as `discountCodeRefusal`, not as an error.
  */
 export async function previewSubscriptionCheckout(
     client: AdibilisClient,
     request: SubscriptionCheckoutRequest,
-    options: ShopCallOptions
+    options: SubscriptionCheckoutCallOptions
 ): Promise<SubscriptionCheckoutPreview> {
-    const init = initOf(options);
+    const init = checkoutInitOf(options);
     const { expectedAmount: _ignored, ...payload } = PreviewPayloadModel.parse(payloadOf(request, true));
     return client.post<SubscriptionCheckoutPreview>(CHECKOUT_PATH, { ...payload, preview: true }, init);
 }
@@ -175,9 +197,9 @@ export async function previewSubscriptionCheckout(
 export async function startSubscriptionCheckout(
     client: AdibilisClient,
     request: SubscriptionCheckoutStartRequest,
-    options: ShopCallOptions
+    options: SubscriptionCheckoutCallOptions
 ): Promise<SubscriptionCheckoutStarted> {
-    const init = initOf(options);
+    const init = checkoutInitOf(options);
     const payload = { ...StartPayloadModel.parse(payloadOf(request, false)), preview: false };
     try {
         return await client.post<SubscriptionCheckoutStarted>(CHECKOUT_PATH, payload, init);

@@ -71,6 +71,7 @@ export {
 } from './subscription/checkout-client.js';
 export type {
     ShopCallOptions,
+    SubscriptionCheckoutCallOptions,
     SubscriptionCheckoutRequest,
     SubscriptionCheckoutStartRequest,
 } from './subscription/checkout-client.js';
@@ -87,6 +88,7 @@ export type {
     CustomerProfile,
     CustomerSubscription,
     CustomerSubscriptionDetail,
+    CustomerSubscriptionDiscount,
     CustomerTransaction,
 } from './customer/types.js';
 export {
