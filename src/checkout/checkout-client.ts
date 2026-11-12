@@ -51,7 +51,7 @@ export interface CheckoutPreview {
     vatRate: number | null;
     /** Lower-case ISO code, as Stripe wants it. */
     currency: string;
-    /** What the discount code and the customer's own discounts take off, in major units; `0` without one. Core's figure — never recompute it. */
+    /** Everything the buyer saves, in major units: every automatic discount (also ones open to everyone, and free delivery) plus the code; `0` without any. Core's figure — never recompute it. */
     discountTotal: number;
     /** The code core applied, or absent. */
     discountCode?: string | null;

@@ -158,7 +158,7 @@ import { previewCheckout, startCheckout, checkoutRefusalOf } from '@adbls/sdk/se
 const withCode = { ...request, order: { ...order, discountCode: 'SPRING' } };   // build it once: preview and start must carry the same code
 const visitor = { customerSession, clientIp: visitorIpOf(request) };             // the buyer's IP literal as your server saw it
 const preview = await previewCheckout(core, withCode, visitor);
-// preview.discountTotal — what the code and the customer's own discounts take off, major units; 0 without one (always present)
+// preview.discountTotal — everything the buyer saves, major units: every automatic discount (also ones open to everyone, and free delivery) plus the code; 0 without any (always present)
 // preview.discountCode — the code core applied; preview.discountCodeRefusal — why it was NOT applied (a DiscountCodeRefusal, or absent)
 // preview.amount is already the discounted total: show it, send it as expectedAmount
 
@@ -169,6 +169,7 @@ try {
     // CHECKOUT_AMOUNT_CHANGED → preview again, show refusal.amount (also when the session lapsed between preview and start);
     // CHECKOUT_EXPIRED, CHECKOUT_PAYMENT_IN_PROGRESS, SHOP_PRODUCT_NOT_AVAILABLE → as above;
     // DISCOUNT_CODE_REFUSED → refusal.reason, the code field's error (nothing was created);
+    // SHOP_PRODUCT_NOT_FOUND → a catalog line's product is not listed any more; SHOP_PRODUCT_NOT_PRICED → refusal.productId has no price in refusal.currency;
     // SHOP_PRODUCT_PRICE_OUT_OF_RANGE → refusal.productId: the chosen open price is off the product's range or step;
     // ORDER_DELIVERY_LINE_WITH_PRODUCT → a delivery line also named a product (a bug in the cart builder)
     // TOO_MANY_REQUESTS → this visitor used up their budget: wait, do not loop
@@ -208,6 +209,8 @@ is the shop's; English examples:
 (a line that names both is refused with 400 `ORDER_DELIVERY_LINE_WITH_PRODUCT`): a plain charge core
 can recognise. A free-delivery code takes that line off, so a shop that wants to offer one must send its
 delivery as such a line; a cart without one answers the code `NO_DELIVERY`.
+
+**A code needs a catalog line.** Core applies a one-time code only to a cart with at least one catalog (`productId`) line; a cart of external lines only answers every code `NOT_APPLICABLE`.
 
 **Open-price lines.** For a product with `openPrice` the buyer chooses the price: send it as the
 line's `unitPrice` together with the `productId`. Core requires it on such a line, and refuses one outside the
@@ -413,7 +416,7 @@ options, for the customer's own discount); the preview answers:
 
 Show the first charge and the regular price side by side ("CHF 8.00 today, then CHF 10.00 a
 week"); never derive one from the other. A dynamic cart may carry catalog lines (`productId`, kind
-`PRODUCT_LINKED`, priced by core, an open price in `unitPrice`) and `delivery: true` lines (no
+`PRODUCT_LINKED`; send the product's catalog price as `unitPrice`, core checks it and refuses any other with `SHOP_PRODUCT_PRICE_OUT_OF_RANGE`; an open price is the buyer's choice) and `delivery: true` lines (no
 `productId`). New refusals read by `subscriptionCheckoutRefusalOf`: 404 `SHOP_PRODUCT_NOT_FOUND`, 400
 `SHOP_PRODUCT_NOT_PRICED` (`productId`, `currency`), 400 `SHOP_PRODUCT_PRICE_OUT_OF_RANGE`
 (`productId`, `currency`), 400 `ORDER_DELIVERY_LINE_WITH_PRODUCT`, 400
@@ -756,7 +759,7 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   appear in the checkout preview only. Checkout and subscription checkout take the same
   `{ customerSession }`.
 - **Checkout prices come from here too.** Put `productId` on an order line and core prices it from
-  the product's price in the order's `currency`, ignoring `unitPrice`, and recomputes `grandTotal`.
+  the product's price in the order's `currency`, ignoring `unitPrice` (except for an open-price product, see Checkout), and recomputes `grandTotal`.
   A product with no price in that currency is refused (`SHOP_PRODUCT_NOT_PRICED`) before any order
   exists. Core routes the invoice to the Stripe account configured for that currency, so the
   `publishableKey` in the checkout response can differ between a CHF and a EUR order.
@@ -1074,9 +1077,11 @@ and you can depend on it directly when you build beyond what the SDK wraps.
 
 The dependency range here is the statement of *which core releases this SDK speaks to*: **0.12.0 requires
 `@adbls/api-types` ^1.9.30 / core v1.9.30 or later** (discounts: codes, customer-group prices, open prices,
-delivery lines, the portal's `discount`; against an older core the new response fields are absent
-and it silently ignores the new request fields, `discountCode` and `delivery`, so a code is never applied). In your own test fixtures the types now require `ShopProductResponse.openPrice`
-and `CheckoutPreview.discountTotal`.
+delivery lines, the portal's `discount`; an older core ignores the new request fields, `discountCode` and `delivery`, so a code is never applied, and
+leaves the new response fields absent, `CheckoutPreview.discountTotal` included: absent, not `0`). In your own test fixtures the types now require
+`ShopProductResponse.openPrice`, `CheckoutPreview.discountTotal`, the subscription checkout amounts' `firstAmount`, `regularAmount`,
+`discountedAmount`, `discountDuration`, `discountDurationMonths`, `discountCode` and `discountCodeRefusal`, and
+`CustomerSubscription.discount` and `CustomerSubscriptionDetail.discount`.
 
 Earlier floors: `^1.9.20` was
 the first core release with pickup sites (`GET /api/shop/pickup-site`, `pickupSiteId` on an order and a
