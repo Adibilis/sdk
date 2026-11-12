@@ -17,9 +17,12 @@ export {
     checkoutPaymentInProgressOf,
     getOrderStatus,
 } from './checkout/checkout-client.js';
+export { checkoutRefusalOf } from './checkout/checkout-refusal.js';
+export type { CheckoutRefusal } from './checkout/checkout-refusal.js';
 export { checkoutStatusOutcome } from './checkout/checkout-status.js';
 export type { CheckoutOutcome } from './checkout/checkout-status.js';
 export type {
+    CheckoutCallOptions,
     CheckoutPreview,
     CheckoutRequest,
     CheckoutResponse,

@@ -1,5 +1,6 @@
 'use client';
 
+import type { DiscountCodeRefusal } from '@adbls/api-types';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
 export type CheckoutStep = 'customer_info' | 'payment';
@@ -28,6 +29,13 @@ export interface TaxBreakdown {
     currency: string;
 }
 
+/** The discount code a shop's code field applied or was refused, and what core took off — a preview's figures, one place for the code field and the totals. */
+export interface CheckoutDiscount {
+    code: string | null;
+    total: number;
+    refusal: DiscountCodeRefusal | null;
+}
+
 export interface CheckoutContextValue {
     formState: FormState;
     setFormState: (state: FormState) => void;
@@ -35,6 +43,8 @@ export interface CheckoutContextValue {
     setStripe: (settings: StripeSettings | null) => void;
     taxBreakdown: TaxBreakdown | null;
     setTaxBreakdown: (breakdown: TaxBreakdown | null) => void;
+    discount: CheckoutDiscount | null;
+    setDiscount: (discount: CheckoutDiscount | null) => void;
     /** Set by the customer form, invoked by the payment step — the handoff between the two. */
     proceedToPayment: (() => void) | null;
     setProceedToPayment: (fn: (() => void) | null) => void;
@@ -42,8 +52,8 @@ export interface CheckoutContextValue {
     paymentCallback: (() => void) | null;
     setPaymentCallback: (fn: (() => void) | null) => void;
     /**
-     * Step 2 → step 1: drops the Stripe settings and the ready flag, keeps the tax breakdown and the
-     * registered handlers. The shop keeps its form values (a `FormProvider` mounted above both steps)
+     * Step 2 → step 1: drops the Stripe settings and the ready flag, clears the discount (the resubmit prices it again),
+     * keeps the tax breakdown and the registered handlers. The shop keeps its form values (a `FormProvider` mounted above both steps)
      * and resubmits: the same reference for a retry or a corrected email, a new one for any other change.
      */
     goBack: () => void;
@@ -74,6 +84,7 @@ export function CheckoutProvider({ children, onSuccess }: { children: ReactNode;
     const [formState, setFormState] = useState<FormState>(INITIAL_FORM_STATE);
     const [stripe, setStripe] = useState<StripeSettings | null>(null);
     const [taxBreakdown, setTaxBreakdown] = useState<TaxBreakdown | null>(null);
+    const [discount, setDiscount] = useState<CheckoutDiscount | null>(null);
     const [proceedToPayment, setProceedToPaymentState] = useState<(() => void) | null>(null);
     const [paymentCallback, setPaymentCallbackState] = useState<(() => void) | null>(null);
 
@@ -86,6 +97,7 @@ export function CheckoutProvider({ children, onSuccess }: { children: ReactNode;
     const goBack = useCallback(() => {
         setFormState(INITIAL_FORM_STATE);
         setStripe(null);
+        setDiscount(null);
     }, []);
 
     const value = useMemo<CheckoutContextValue>(
@@ -96,6 +108,8 @@ export function CheckoutProvider({ children, onSuccess }: { children: ReactNode;
             setStripe,
             taxBreakdown,
             setTaxBreakdown,
+            discount,
+            setDiscount,
             proceedToPayment,
             setProceedToPayment,
             paymentCallback,
@@ -103,7 +117,7 @@ export function CheckoutProvider({ children, onSuccess }: { children: ReactNode;
             goBack,
             onSuccess,
         }),
-        [formState, stripe, taxBreakdown, proceedToPayment, setProceedToPayment, paymentCallback, setPaymentCallback, goBack, onSuccess]
+        [formState, stripe, taxBreakdown, discount, proceedToPayment, setProceedToPayment, paymentCallback, setPaymentCallback, goBack, onSuccess]
     );
 
     return (

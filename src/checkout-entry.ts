@@ -6,6 +6,7 @@ export { KEYBOARD_HEIGHT_PROPERTY, useKeyboardClearance } from './checkout/keybo
 export type { KeyboardClearanceOptions } from './checkout/keyboard-clearance.js';
 export type {
     CheckoutContextValue,
+    CheckoutDiscount,
     CheckoutStep,
     FormState,
     StripeSettings,

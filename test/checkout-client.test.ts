@@ -136,6 +136,48 @@ describe('previewCheckout', () => {
     });
 });
 
+describe('the discount code, the delivery flag and the customer session', () => {
+    const returnUrl = 'https://shop.example/r';
+
+    it('theCodeAndTheDeliveryFlagReachCore', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+        const lineItems = [...order.lineItems, { kind: 'SERVICE', textHtml: '<p>Delivery</p>', quantity: 1, unitType: 'PIECES', unitPrice: 5, vatRate: 8.1, delivery: true }] as const;
+
+        await startCheckout(client, { order: { ...order, lineItems, discountCode: 'SPRING' }, returnUrl });
+        await previewCheckout(client, { order: { ...order, lineItems, discountCode: 'SPRING' }, returnUrl });
+
+        for (const call of client.post.mock.calls) {
+            expect(call[1]).toMatchObject({ order: { discountCode: 'SPRING', lineItems: [{}, { delivery: true }] } });
+        }
+    });
+
+    it('sends the customer session as a header and never caches', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await startCheckout(client, { order, returnUrl }, { customerSession: 'tok_1' });
+        await previewCheckout(client, { order, returnUrl }, { customerSession: 'tok_1' });
+
+        for (const call of client.post.mock.calls) {
+            expect(call[2]).toEqual({ headers: { 'X-Customer-Session': 'tok_1' }, cache: 'no-store' });
+        }
+    });
+
+    it.each([[undefined], [null], ['']])('sends a request identical to a guest\'s for the session %s', async (customerSession) => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await startCheckout(client, { order, returnUrl }, { customerSession });
+
+        expect(client.post.mock.calls[0]).toHaveLength(2);
+    });
+
+    it('returns the discount fields of a preview as core sent them', async () => {
+        const preview = { orderId: null, publishableKey: 'pk', amount: 8, taxAmount: 0.6, vatRate: 8.1, currency: 'chf', discountTotal: 2, discountCode: 'SPRING', discountCodeRefusal: null, preview: true };
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(preview) };
+
+        await expect(previewCheckout(client, { order, returnUrl })).resolves.toMatchObject({ discountTotal: 2, discountCode: 'SPRING', discountCodeRefusal: null });
+    });
+});
+
 describe('amountChangedOf', () => {
     const refusal = (status: number, errorList: unknown) =>
         new AdibilisApiError(status, { error: 'x', errorList, url: '/api/payment/checkout' }, '/api/payment/checkout');

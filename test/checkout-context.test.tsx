@@ -132,4 +132,22 @@ describe('CheckoutProvider', () => {
         expect(result.current.proceedToPayment).toBe(proceed);
         expect(result.current.taxBreakdown).toBe(breakdown);
     });
+
+    it('starts without a discount and holds the one a shop sets', () => {
+        const { result } = renderHook(() => useCheckout(), { wrapper });
+        expect(result.current.discount).toBeNull();
+
+        act(() => result.current.setDiscount({ code: 'SPRING', total: 2, refusal: null }));
+
+        expect(result.current.discount).toEqual({ code: 'SPRING', total: 2, refusal: null });
+    });
+
+    it('goBack clears the discount', () => {
+        const { result } = renderHook(() => useCheckout(), { wrapper });
+        act(() => result.current.setDiscount({ code: 'SPRING', total: 2, refusal: null }));
+
+        act(() => result.current.goBack());
+
+        expect(result.current.discount).toBeNull();
+    });
 });

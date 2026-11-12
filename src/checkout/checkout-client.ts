@@ -1,9 +1,20 @@
 import { CheckoutRequestModel } from '@adbls/api-types';
-import type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse } from '@adbls/api-types';
+import type { CheckoutRequest, CheckoutResponse, DiscountCodeRefusal, PaymentStatusResponse } from '@adbls/api-types';
 import type { AdibilisClient } from '../client/api-client.js';
+import { customerSessionInit } from '../customer/session.js';
 import { AdibilisApiError } from '../client/errors.js';
 
-export type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse };
+export type { CheckoutRequest, CheckoutResponse, DiscountCodeRefusal, PaymentStatusResponse };
+
+export interface CheckoutCallOptions {
+    /** The signed-in customer's portal session (`customerSessionFromCookies`): core prices the cart for this customer. Without one the call is exactly as for a guest. */
+    customerSession?: string | null;
+}
+
+function postCheckout<T>(client: AdibilisClient, payload: unknown, options: CheckoutCallOptions | undefined): Promise<T> {
+    const init = customerSessionInit(options?.customerSession);
+    return Object.keys(init).length === 0 ? client.post<T>('/api/payment/checkout', payload) : client.post<T>('/api/payment/checkout', payload, init);
+}
 
 /** `CheckoutRequest` plus the grand total the shop showed — typed here until `@adbls/api-types` carries it. */
 export type CheckoutStartRequest = Omit<CheckoutRequest, 'preview'> & {
@@ -33,6 +44,12 @@ export interface CheckoutPreview {
     vatRate: number | null;
     /** Lower-case ISO code, as Stripe wants it. */
     currency: string;
+    /** What the discount code and the customer's own discounts take off, in major units; `0` without one. Core's figure — never recompute it. */
+    discountTotal: number;
+    /** The code core applied, or absent. */
+    discountCode?: string | null;
+    /** Why the code in the request was not applied (the preview is still a price, not an error), or absent. */
+    discountCodeRefusal?: DiscountCodeRefusal | null;
     preview: true;
 }
 
@@ -67,7 +84,11 @@ export interface CheckoutPreview {
  * Optional response fields (`hostedInvoiceUrl`, `invoicePdfUrl`, ...) arrive as JSON `null`, not
  * as absent keys — check for both.
  */
-export async function startCheckout(client: AdibilisClient, request: CheckoutStartRequest): Promise<CheckoutResponse> {
+export async function startCheckout(
+    client: AdibilisClient,
+    request: CheckoutStartRequest,
+    options?: CheckoutCallOptions
+): Promise<CheckoutResponse> {
     // async so a validation failure is a rejection like every other failure, not a synchronous throw
     // a caller handling only the promise would miss
     const { expectedAmount, ...rest } = request;
@@ -77,7 +98,7 @@ export async function startCheckout(client: AdibilisClient, request: CheckoutSta
         preview: false,
         ...(expectedAmount === undefined ? {} : { expectedAmount }),
     };
-    return client.post<CheckoutResponse>('/api/payment/checkout', payload);
+    return postCheckout<CheckoutResponse>(client, payload, options);
 }
 
 /**
@@ -91,9 +112,13 @@ export async function startCheckout(client: AdibilisClient, request: CheckoutSta
  * required here too. With automatic tax on, the order's delivery address decides the tax, or the
  * billing address when there is no delivery person — send the same addresses the checkout will.
  */
-export async function previewCheckout(client: AdibilisClient, request: Omit<CheckoutRequest, 'preview'>): Promise<CheckoutPreview> {
+export async function previewCheckout(
+    client: AdibilisClient,
+    request: Omit<CheckoutRequest, 'preview'>,
+    options?: CheckoutCallOptions
+): Promise<CheckoutPreview> {
     const payload = { ...CheckoutRequestModel.parse({ ...request, preview: true }), preview: true };
-    return client.post<CheckoutPreview>('/api/payment/checkout', payload);
+    return postCheckout<CheckoutPreview>(client, payload, options);
 }
 
 /**
