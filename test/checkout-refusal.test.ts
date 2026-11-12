@@ -16,6 +16,7 @@ describe('checkoutRefusalOf', () => {
         ['a refused code without delivery', refusal(409, { DISCOUNT_CODE_REFUSED: ['NO_DELIVERY'] }), { code: 'DISCOUNT_CODE_REFUSED', reason: 'NO_DELIVERY' }],
         ['a refused code with an unknown reason', refusal(409, { DISCOUNT_CODE_REFUSED: ['FROM_THE_FUTURE'] }), { code: 'DISCOUNT_CODE_REFUSED', reason: null }],
         ['an open price out of range', refusal(400, { SHOP_PRODUCT_PRICE_OUT_OF_RANGE: ['12', 'CHF'] }), { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE', productId: 12 }],
+        ['a throttled call', refusal(429, { TOO_MANY_REQUESTS: [] }), { code: 'TOO_MANY_REQUESTS' }],
         ['a delivery line with a product', refusal(400, { ORDER_DELIVERY_LINE_WITH_PRODUCT: [] }), { code: 'ORDER_DELIVERY_LINE_WITH_PRODUCT' }],
     ])('reads %s', (_name, error, expected) => {
         expect(checkoutRefusalOf(error)).toEqual(expected);
@@ -26,6 +27,7 @@ describe('checkoutRefusalOf', () => {
         ['a refused code without a reason', refusal(409, { DISCOUNT_CODE_REFUSED: [] })],
         ['an out of range price without a product', refusal(400, { SHOP_PRODUCT_PRICE_OUT_OF_RANGE: [] })],
         ['an unknown key', refusal(409, { SOMETHING_ELSE: [] })],
+        ['a 429 without the key', refusal(429, { SOMETHING_ELSE: [] })],
         ['another status', refusal(500, { CHECKOUT_EXPIRED: [] })],
         ['a body without errorList', new AdibilisApiError(409, 'conflict', '/p')],
         ['a foreign error', new Error('boom')],

@@ -3,17 +3,24 @@ import type { CheckoutRequest, CheckoutResponse, DiscountCodeRefusal, PaymentSta
 import type { AdibilisClient } from '../client/api-client.js';
 import { customerSessionInit } from '../customer/session.js';
 import { AdibilisApiError } from '../client/errors.js';
+import { shopCallHeaders } from '../subscription/checkout-client.js';
 
 export type { CheckoutRequest, CheckoutResponse, DiscountCodeRefusal, PaymentStatusResponse };
 
 export interface CheckoutCallOptions {
     /** The signed-in customer's portal session (`customerSessionFromCookies`): core prices the cart for this customer. Without one the call is exactly as for a guest. */
     customerSession?: string | null;
+    /** The visitor's IP from your request (IPv4 or IPv6 literal), sent as `X-Shop-Client-Ip`. Core counts wrong codes and checkout calls per visitor with it; without it every visitor shares the shop's budget. A value that is no IP literal is a `ZodError`. */
+    clientIp?: string;
 }
 
 function postCheckout<T>(client: AdibilisClient, payload: unknown, options: CheckoutCallOptions | undefined): Promise<T> {
-    const init = customerSessionInit(options?.customerSession);
-    return Object.keys(init).length === 0 ? client.post<T>('/api/payment/checkout', payload) : client.post<T>('/api/payment/checkout', payload, init);
+    const session = customerSessionInit(options?.customerSession);
+    const ip = options?.clientIp === undefined ? {} : shopCallHeaders({ clientIp: options.clientIp });
+    const init = { ...session, headers: { ...ip, ...session.headers } };
+    return Object.keys(init.headers).length === 0 && Object.keys(session).length === 0
+        ? client.post<T>('/api/payment/checkout', payload)
+        : client.post<T>('/api/payment/checkout', payload, init);
 }
 
 /** `CheckoutRequest` plus the grand total the shop showed — typed here until `@adbls/api-types` carries it. */
@@ -189,7 +196,15 @@ export function productUnavailableOf(error: unknown): ProductUnavailable | null 
  * Both halves of the key travel as query parameters: a shop's reference is opaque text that may
  * contain a slash, so it cannot be a path segment.
  */
-export function getOrderStatus(client: AdibilisClient, externalSource: string, externalRef: string): Promise<PaymentStatusResponse> {
+export async function getOrderStatus(
+    client: AdibilisClient,
+    externalSource: string,
+    externalRef: string,
+    options?: { clientIp?: string }
+): Promise<PaymentStatusResponse> {
     const query = new URLSearchParams({ externalSource, externalRef });
-    return client.get<PaymentStatusResponse>(`/api/payment/order?${query}`);
+    const path = `/api/payment/order?${query}`;
+    return options?.clientIp === undefined
+        ? client.get<PaymentStatusResponse>(path)
+        : client.get<PaymentStatusResponse>(path, { headers: shopCallHeaders({ clientIp: options.clientIp }) });
 }
