@@ -136,6 +136,80 @@ describe('previewCheckout', () => {
     });
 });
 
+describe('the discount code, the delivery flag and the customer session', () => {
+    const returnUrl = 'https://shop.example/r';
+
+    it('theCodeAndTheDeliveryFlagReachCore', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+        const lineItems = [...order.lineItems, { kind: 'SERVICE', textHtml: '<p>Delivery</p>', quantity: 1, unitType: 'PIECES', unitPrice: 5, vatRate: 8.1, delivery: true }] as const;
+
+        await startCheckout(client, { order: { ...order, lineItems, discountCode: 'SPRING' }, returnUrl });
+        await previewCheckout(client, { order: { ...order, lineItems, discountCode: 'SPRING' }, returnUrl });
+
+        for (const call of client.post.mock.calls) {
+            expect(call[1]).toMatchObject({ order: { discountCode: 'SPRING', lineItems: [{}, { delivery: true }] } });
+        }
+    });
+
+    it('sends the customer session as a header and never caches', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await startCheckout(client, { order, returnUrl }, { customerSession: 'tok_1' });
+        await previewCheckout(client, { order, returnUrl }, { customerSession: 'tok_1' });
+
+        for (const call of client.post.mock.calls) {
+            expect(call[2]).toEqual({ headers: { 'X-Customer-Session': 'tok_1' }, cache: 'no-store' });
+        }
+    });
+
+    it.each([[undefined], [null], ['']])('sends a request identical to a guest\'s for the session %s', async (customerSession) => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await startCheckout(client, { order, returnUrl }, { customerSession });
+
+        expect(client.post.mock.calls[0]).toHaveLength(2);
+    });
+
+    it('sends the visitor IP as the shop client header, with or without a session', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await startCheckout(client, { order, returnUrl }, { clientIp: '203.0.113.9' });
+        await previewCheckout(client, { order, returnUrl }, { clientIp: '203.0.113.9' });
+        await previewCheckout(client, { order, returnUrl }, { clientIp: '203.0.113.9', customerSession: 'tok_1' });
+
+        expect(client.post.mock.calls[0]?.[2]).toEqual({ headers: { 'X-Shop-Client-Ip': '203.0.113.9' } });
+        expect(client.post.mock.calls[1]?.[2]).toEqual({ headers: { 'X-Shop-Client-Ip': '203.0.113.9' } });
+        expect(client.post.mock.calls[2]?.[2]).toEqual({
+            headers: { 'X-Shop-Client-Ip': '203.0.113.9', 'X-Customer-Session': 'tok_1' },
+            cache: 'no-store',
+        });
+    });
+
+    it('refuses an IP that is no literal before anything is sent', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await expect(previewCheckout(client, { order, returnUrl }, { clientIp: '1.2.3.4, 5.6.7.8' })).rejects.toBeInstanceOf(ZodError);
+        await expect(startCheckout(client, { order, returnUrl }, { clientIp: 'example.com' })).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it('sends the plain two-argument request when neither option is given', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await startCheckout(client, { order, returnUrl }, {});
+        await previewCheckout(client, { order, returnUrl });
+
+        for (const call of client.post.mock.calls) expect(call).toHaveLength(2);
+    });
+
+    it('returns the discount fields of a preview as core sent them', async () => {
+        const preview = { orderId: null, publishableKey: 'pk', amount: 8, taxAmount: 0.6, vatRate: 8.1, currency: 'chf', discountTotal: 2, discountCode: 'SPRING', discountCodeRefusal: null, preview: true };
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(preview) };
+
+        await expect(previewCheckout(client, { order, returnUrl })).resolves.toMatchObject({ discountTotal: 2, discountCode: 'SPRING', discountCodeRefusal: null });
+    });
+});
+
 describe('amountChangedOf', () => {
     const refusal = (status: number, errorList: unknown) =>
         new AdibilisApiError(status, { error: 'x', errorList, url: '/api/payment/checkout' }, '/api/payment/checkout');
@@ -224,6 +298,23 @@ describe('getOrderStatus', () => {
 
         await expect(getOrderStatus(client, 'example-shop', 'cart-7f3a')).resolves.toEqual(status);
         expect(client.get).toHaveBeenCalledWith('/api/payment/order?externalSource=example-shop&externalRef=cart-7f3a');
+    });
+
+    it('sends the visitor IP when given and nothing extra otherwise', async () => {
+        const client = { get: vi.fn().mockResolvedValue({}), post: vi.fn() };
+
+        await getOrderStatus(client, 'example-shop', 'cart-7f3a', { clientIp: '203.0.113.9' });
+        await getOrderStatus(client, 'example-shop', 'cart-7f3a', {});
+
+        expect(client.get.mock.calls[0]?.[1]).toEqual({ headers: { 'X-Shop-Client-Ip': '203.0.113.9' } });
+        expect(client.get.mock.calls[1]).toHaveLength(1);
+    });
+
+    it('refuses an IP that is no literal', async () => {
+        const client = { get: vi.fn().mockResolvedValue({}), post: vi.fn() };
+
+        await expect(getOrderStatus(client, 's', 'r', { clientIp: 'nope' })).rejects.toBeInstanceOf(ZodError);
+        expect(client.get).not.toHaveBeenCalled();
     });
 
     it('encodes a reference that would break a path segment', async () => {

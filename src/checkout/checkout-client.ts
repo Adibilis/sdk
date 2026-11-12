@@ -1,9 +1,27 @@
 import { CheckoutRequestModel } from '@adbls/api-types';
-import type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse } from '@adbls/api-types';
+import type { CheckoutRequest, CheckoutResponse, DiscountCodeRefusal, PaymentStatusResponse } from '@adbls/api-types';
 import type { AdibilisClient } from '../client/api-client.js';
+import { customerSessionInit } from '../customer/session-header.js';
 import { AdibilisApiError } from '../client/errors.js';
+import { shopCallHeaders } from '../subscription/checkout-client.js';
 
-export type { CheckoutRequest, CheckoutResponse, PaymentStatusResponse };
+export type { CheckoutRequest, CheckoutResponse, DiscountCodeRefusal, PaymentStatusResponse };
+
+export interface CheckoutCallOptions {
+    /** The signed-in customer's portal session (`customerSessionFromCookies`): core prices the cart for this customer. Without one the call is exactly as for a guest. */
+    customerSession?: string | null;
+    /** The visitor's IP from your request (IPv4 or IPv6 literal), sent as `X-Shop-Client-Ip`. Core counts wrong codes and checkout calls per visitor with it; without it every visitor shares the shop's budget. A value that is no IP literal is a `ZodError`. */
+    clientIp?: string;
+}
+
+function postCheckout<T>(client: AdibilisClient, payload: unknown, options: CheckoutCallOptions | undefined): Promise<T> {
+    const session = customerSessionInit(options?.customerSession);
+    const ip = options?.clientIp === undefined ? {} : shopCallHeaders({ clientIp: options.clientIp });
+    const init = { ...session, headers: { ...ip, ...session.headers } };
+    return Object.keys(init.headers).length === 0 && Object.keys(session).length === 0
+        ? client.post<T>('/api/payment/checkout', payload)
+        : client.post<T>('/api/payment/checkout', payload, init);
+}
 
 /** `CheckoutRequest` plus the grand total the shop showed — typed here until `@adbls/api-types` carries it. */
 export type CheckoutStartRequest = Omit<CheckoutRequest, 'preview'> & {
@@ -33,8 +51,20 @@ export interface CheckoutPreview {
     vatRate: number | null;
     /** Lower-case ISO code, as Stripe wants it. */
     currency: string;
+    /** Everything the buyer saves, in major units: every automatic discount (also ones open to everyone, and free delivery) plus the code; `0` without any. Core's figure — never recompute it. */
+    discountTotal: number;
+    /** The code core applied, or absent. */
+    discountCode?: string | null;
+    /** Why the code in the request was not applied (the preview is still a price, not an error), or absent. */
+    discountCodeRefusal?: DiscountCodeRefusal | null;
     preview: true;
 }
+
+type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
+type Holds<T extends true> = T;
+
+// A field core adds to or drops from the checkout response fails this build, not a shop at run time.
+export type CheckoutPreviewMatchesCore = Holds<SameKeys<CheckoutPreview, CheckoutResponse>>;
 
 /**
  * Creates the order in core and opens its Stripe invoice. The response carries everything the
@@ -67,7 +97,11 @@ export interface CheckoutPreview {
  * Optional response fields (`hostedInvoiceUrl`, `invoicePdfUrl`, ...) arrive as JSON `null`, not
  * as absent keys — check for both.
  */
-export async function startCheckout(client: AdibilisClient, request: CheckoutStartRequest): Promise<CheckoutResponse> {
+export async function startCheckout(
+    client: AdibilisClient,
+    request: CheckoutStartRequest,
+    options?: CheckoutCallOptions
+): Promise<CheckoutResponse> {
     // async so a validation failure is a rejection like every other failure, not a synchronous throw
     // a caller handling only the promise would miss
     const { expectedAmount, ...rest } = request;
@@ -77,7 +111,7 @@ export async function startCheckout(client: AdibilisClient, request: CheckoutSta
         preview: false,
         ...(expectedAmount === undefined ? {} : { expectedAmount }),
     };
-    return client.post<CheckoutResponse>('/api/payment/checkout', payload);
+    return postCheckout<CheckoutResponse>(client, payload, options);
 }
 
 /**
@@ -91,9 +125,13 @@ export async function startCheckout(client: AdibilisClient, request: CheckoutSta
  * required here too. With automatic tax on, the order's delivery address decides the tax, or the
  * billing address when there is no delivery person — send the same addresses the checkout will.
  */
-export async function previewCheckout(client: AdibilisClient, request: Omit<CheckoutRequest, 'preview'>): Promise<CheckoutPreview> {
+export async function previewCheckout(
+    client: AdibilisClient,
+    request: Omit<CheckoutRequest, 'preview'>,
+    options?: CheckoutCallOptions
+): Promise<CheckoutPreview> {
     const payload = { ...CheckoutRequestModel.parse({ ...request, preview: true }), preview: true };
-    return client.post<CheckoutPreview>('/api/payment/checkout', payload);
+    return postCheckout<CheckoutPreview>(client, payload, options);
 }
 
 /**
@@ -164,7 +202,15 @@ export function productUnavailableOf(error: unknown): ProductUnavailable | null 
  * Both halves of the key travel as query parameters: a shop's reference is opaque text that may
  * contain a slash, so it cannot be a path segment.
  */
-export function getOrderStatus(client: AdibilisClient, externalSource: string, externalRef: string): Promise<PaymentStatusResponse> {
+export async function getOrderStatus(
+    client: AdibilisClient,
+    externalSource: string,
+    externalRef: string,
+    options?: { clientIp?: string }
+): Promise<PaymentStatusResponse> {
     const query = new URLSearchParams({ externalSource, externalRef });
-    return client.get<PaymentStatusResponse>(`/api/payment/order?${query}`);
+    const path = `/api/payment/order?${query}`;
+    return options?.clientIp === undefined
+        ? client.get<PaymentStatusResponse>(path)
+        : client.get<PaymentStatusResponse>(path, { headers: shopCallHeaders({ clientIp: options.clientIp }) });
 }

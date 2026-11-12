@@ -1,12 +1,15 @@
+import type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
 import type {
     BillingInterval,
     PaymentStatus,
     PriceMode,
     ScheduleDefinition,
+    SubscriptionCheckoutResponse,
     SubscriptionSecretKind,
     SubscriptionStatus,
 } from './wire.js';
 
+export type { DiscountDuration };
 export type {
     BillingInterval,
     PaymentStatus,
@@ -70,8 +73,22 @@ export function isDynamicEntry(entry: ShopSubscriptionEntry): entry is DynamicSu
 
 interface SubscriptionCheckoutAmounts {
     publishableKey: string;
-    /** What the first charge totals, major units. */
+    /** What the first charge totals, major units — the figure to send as `expectedAmount`. */
     amount: number;
+    /** The first charge again, under the name that pairs with `regularAmount`. */
+    firstAmount: number;
+    /** What each billing period charges before any discount, VAT included, major units. Core's figure — never recompute it. */
+    regularAmount: number;
+    /** What each billing period charges while the discount lasts (`discountDuration`, `discountDurationMonths`); `null` without a discount. */
+    discountedAmount: number | null;
+    /** How long the discount runs, or absent without one. */
+    discountDuration: DiscountDuration | null;
+    /** How many calendar months a `REPEATING` discount lasts, whatever the billing interval (Stripe's `duration_in_months`), or absent. */
+    discountDurationMonths: number | null;
+    /** The code core applied, or absent. */
+    discountCode: string | null;
+    /** Why the code in the request was not applied (the preview is still a price, not an error), or absent. */
+    discountCodeRefusal: DiscountCodeRefusal | null;
     taxAmount: number;
     vatRate: number | null;
     /** Upper-case ISO code as core stores it (`CHF`); Stripe Elements wants it lower-case. */
@@ -99,6 +116,15 @@ export interface SubscriptionCheckoutStarted extends SubscriptionCheckoutAmounts
     secretKind: SubscriptionSecretKind;
     preview: false;
 }
+
+type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
+type Holds<T extends true> = T;
+
+// A field core adds to or drops from the subscription checkout response fails this build, not a shop at run time.
+export type SubscriptionCheckoutMatchesCore = [
+    Holds<SameKeys<SubscriptionCheckoutPreview, SubscriptionCheckoutResponse>>,
+    Holds<SameKeys<SubscriptionCheckoutStarted, SubscriptionCheckoutResponse>>,
+];
 
 export interface SubscriptionCheckoutStatus {
     subscriptionId: number;

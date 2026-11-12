@@ -19,8 +19,11 @@ export type { HolidayRange } from './shop/holidays-client.js';
 export type { PickupSite } from './shop/pickup-site-client.js';
 export { priceIn, shopImageUrl, vatNoteOf } from './shop/product-image.js';
 export type { VatNote } from './shop/product-image.js';
+export { isValidOpenPrice, openPriceSteps, shopPriceView } from './shop/price-view.js';
+export type { OpenPriceRange, ShopPriceInput, ShopPriceView } from './shop/price-view.js';
 export type { ProductPriceResponse, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
 
+export type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
 export { confirmMethodOf, isDynamicEntry } from './subscription/types.js';
 export type {
     BillingInterval,
@@ -56,6 +59,7 @@ export type {
     CustomerProfile,
     CustomerSubscription,
     CustomerSubscriptionDetail,
+    CustomerSubscriptionDiscount,
     CustomerTransaction,
     CustomerTransactionKind,
     FulfillmentType,

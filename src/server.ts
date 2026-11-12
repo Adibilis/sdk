@@ -17,9 +17,13 @@ export {
     checkoutPaymentInProgressOf,
     getOrderStatus,
 } from './checkout/checkout-client.js';
+export type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
+export { checkoutRefusalOf } from './checkout/checkout-refusal.js';
+export type { CheckoutRefusal } from './checkout/checkout-refusal.js';
 export { checkoutStatusOutcome } from './checkout/checkout-status.js';
 export type { CheckoutOutcome } from './checkout/checkout-status.js';
 export type {
+    CheckoutCallOptions,
     CheckoutPreview,
     CheckoutRequest,
     CheckoutResponse,
@@ -48,7 +52,13 @@ export type { PublishedReviewResponse, PublishedReviewsResponse } from './review
 export { subscribeNewsletter } from './shop/newsletter-client.js';
 export type { NewsletterLanguage, NewsletterSignupRequest } from './shop/newsletter-client.js';
 export { fetchShopProduct, fetchShopProducts } from './shop/product-client.js';
-export type { ProductPriceResponse, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
+export type {
+    ProductPriceResponse,
+    ShopProductImageResponse,
+    ShopProductPriceResponse,
+    ShopProductReadOptions,
+    ShopProductResponse,
+} from './shop/product-client.js';
 
 export type {
     DynamicSubscriptionEntry,
@@ -68,6 +78,7 @@ export {
 } from './subscription/checkout-client.js';
 export type {
     ShopCallOptions,
+    SubscriptionCheckoutCallOptions,
     SubscriptionCheckoutRequest,
     SubscriptionCheckoutStartRequest,
 } from './subscription/checkout-client.js';
@@ -84,10 +95,12 @@ export type {
     CustomerProfile,
     CustomerSubscription,
     CustomerSubscriptionDetail,
+    CustomerSubscriptionDiscount,
     CustomerTransaction,
 } from './customer/types.js';
 export {
     CUSTOMER_SESSION_COOKIE,
+    customerSessionFromCookies,
     exchangeLoginToken,
     expiredCustomerSessionCookie,
     MAX_SESSION_TOKEN_LENGTH,

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import { createAdibilisClient } from '../src/client/api-client';
 import { AdibilisApiError } from '../src/client/errors';
-import { exchangeLoginToken, expiredCustomerSessionCookie, requestLoginLink } from '../src/customer/session';
+import { customerSessionFromCookies, exchangeLoginToken, expiredCustomerSessionCookie, requestLoginLink } from '../src/customer/session';
+import { customerSessionInit } from '../src/customer/session-header';
 
 const visitor = { clientIp: '203.0.113.7' };
 const visitorHeader = { headers: { 'X-Shop-Client-Ip': '203.0.113.7' } };
@@ -154,5 +155,35 @@ describe('the __Host- cookie prefix requirements', () => {
             expect(header).toContain('; Path=/;');
             expect(header).toContain('; Secure');
         }
+    });
+});
+
+describe('customerSessionFromCookies', () => {
+    const cookie = (value: string) => `theme=dark; __Host-adbl_customer=${value}; b=2`;
+
+    it('reads a well-formed token from a header or a cookie store', () => {
+        expect(customerSessionFromCookies(cookie(session.sessionToken))).toBe(session.sessionToken);
+        expect(customerSessionFromCookies({ get: () => ({ value: ` ${session.sessionToken} ` }) })).toBe(session.sessionToken);
+    });
+
+    it('answers null without the cookie', () => {
+        expect(customerSessionFromCookies('theme=dark')).toBeNull();
+        expect(customerSessionFromCookies(null)).toBeNull();
+        expect(customerSessionFromCookies({ get: () => undefined })).toBeNull();
+    });
+
+    it('answers null for a malformed or too long token', () => {
+        expect(customerSessionFromCookies(cookie('not a token!'))).toBeNull();
+        expect(customerSessionFromCookies(cookie(''))).toBeNull();
+        expect(customerSessionFromCookies(cookie('a'.repeat(129)))).toBeNull();
+        expect(customerSessionFromCookies(cookie('a'.repeat(128)))).not.toBeNull();
+    });
+});
+
+describe('customerSessionInit', () => {
+    it('is empty without a session and carries the header and no-store with one', () => {
+        expect(customerSessionInit(null)).toEqual({});
+        expect(customerSessionInit(undefined)).toEqual({});
+        expect(customerSessionInit('tok')).toEqual({ headers: { 'X-Customer-Session': 'tok' }, cache: 'no-store' });
     });
 });

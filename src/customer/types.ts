@@ -9,6 +9,7 @@ import type {
     CustomerPlanResponse,
     CustomerProfileResponse,
     CustomerSubscriptionDetailResponse,
+    CustomerSubscriptionDiscount,
     CustomerSubscriptionResponse,
     CustomerTransactionKind,
     CustomerTransactionResponse,
@@ -21,6 +22,7 @@ import type {
 } from '../subscription/wire.js';
 
 export type {
+    CustomerSubscriptionDiscount,
     CustomerPaymentRetry,
     CustomerTransactionKind,
     FulfillmentType,
@@ -75,6 +77,8 @@ export interface CustomerSubscription {
     pausedUntil: string | null;
     /** A date (`YYYY-MM-DD`), not an instant: do not pass it to `new Date`. */
     startDate: string | null;
+    /** What the customer's own discount takes off this subscription, or `null` without one. Core's figures — never recompute them. */
+    discount: CustomerSubscriptionDiscount | null;
 }
 
 export interface CustomerPlan {
@@ -150,6 +154,8 @@ export interface CustomerSubscriptionDetail {
     startDate: string | null;
     /** An instant (ISO-8601 timestamp). */
     cancelledAt: string | null;
+    /** What the customer's own discount takes off this subscription, or `null` without one. Core's figures — never recompute them. */
+    discount: CustomerSubscriptionDiscount | null;
     upcomingDeliveries: CustomerDelivery[];
     /** Read live from Stripe, best effort: `null` when Stripe could not be read, and on a cancelled subscription. */
     paymentMethod: CustomerPaymentMethod | null;

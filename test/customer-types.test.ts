@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { CustomerSubscription, CustomerSubscriptionDetail, CustomerSubscriptionDiscount } from '../src/customer/types';
 import {
     CustomerConfigurationRequestModel,
     CustomerDeliveryPersonChangeRequestModel,
@@ -43,5 +44,16 @@ describe('portal request models (copies of core generator output)', () => {
         expect(CustomerLoginLinkRequestModel.safeParse({ ...link, language: 'DE' }).success).toBe(true);
         expect(CustomerLoginLinkRequestModel.safeParse({ ...link, language: 'de' }).success).toBe(false);
         expect(CustomerLoginLinkRequestModel.safeParse({ ...link, language: 'ES' }).success).toBe(false);
+    });
+});
+
+describe('the portal discount', () => {
+    it('is a typed field of the row and the detail, null without a discount', () => {
+        const discount: CustomerSubscriptionDiscount = { name: 'Spring', percent: 20, duration: 'REPEATING', months: 3, active: true, endsAt: '2027-02-01T00:00:00Z' };
+        const row: Pick<CustomerSubscription, 'discount'> = { discount };
+        const detail: Pick<CustomerSubscriptionDetail, 'discount'> = { discount: null };
+
+        expect(row.discount?.months).toBe(3);
+        expect(detail.discount).toBeNull();
     });
 });

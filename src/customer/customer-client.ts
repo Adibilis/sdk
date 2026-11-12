@@ -14,7 +14,9 @@ import {
     CustomerScheduleRequestModel,
 } from '../subscription/wire.js';
 import type { CustomerDeliveryPersonRequest, SchedulePattern } from '../subscription/wire.js';
-import { CUSTOMER_SESSION_COOKIE, MAX_SESSION_TOKEN_LENGTH } from './session.js';
+import { customerSessionFromCookies } from './session.js';
+import { SESSION_HEADER } from './session-header.js';
+import type { CookieReader } from './session.js';
 import { AdibilisApiError } from '../client/errors.js';
 import type {
     CustomerInvoicePdf,
@@ -26,16 +28,11 @@ import type {
     CustomerTransaction,
 } from './types.js';
 
-const SESSION_HEADER = 'X-Customer-Session';
 const SUBSCRIPTION_PATH = '/api/customer/subscription';
 const MAX_PAGE_SIZE = 200;
-const SESSION_TOKEN_SHAPE = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_SESSION_TOKEN_LENGTH}}$`);
 const PDF = 'application/pdf';
 
-/** What `customerFromCookies` reads: Next's `cookies()` and `request.cookies`, or any store with the same `get`. */
-export interface CookieReader {
-    get(name: string): { value: string } | undefined;
-}
+export type { CookieReader };
 
 export interface CustomerPageOptions {
     /** Zero-based. */
@@ -129,15 +126,6 @@ function withQuery(path: string, query: Record<string, number | undefined>): str
     }
     const search = params.toString();
     return search ? `${path}?${search}` : path;
-}
-
-function cookieValue(header: string, name: string): string | undefined {
-    let found: string | undefined;
-    for (const part of header.split(';')) {
-        const separator = part.indexOf('=');
-        if (separator > 0 && part.slice(0, separator).trim() === name) found = part.slice(separator + 1).trim();
-    }
-    return found;
 }
 
 function filenameOf(disposition: string | null): string | null {
@@ -428,7 +416,6 @@ export function customerFromCookies(
     cookies: CookieReader | string | null | undefined,
     options: ShopCallOptions
 ): CustomerClient | null {
-    const raw = typeof cookies === 'string' ? cookieValue(cookies, CUSTOMER_SESSION_COOKIE) : cookies?.get(CUSTOMER_SESSION_COOKIE)?.value;
-    const token = raw?.trim();
-    return token && SESSION_TOKEN_SHAPE.test(token) ? new CustomerClient(client, token, options) : null;
+    const token = customerSessionFromCookies(cookies);
+    return token ? new CustomerClient(client, token, options) : null;
 }

@@ -6,10 +6,37 @@ import type { CustomerSessionResponse } from '../subscription/wire.js';
 import { languageOf } from './language.js';
 import type { CustomerProfile } from './types.js';
 
-/** The cookie that carries the customer's portal session; `customerFromCookies` reads it. */
+export { SESSION_HEADER } from './session-header.js';
+/** The cookie that carries the customer's portal session; `customerFromCookies` and `customerSessionFromCookies` read it. */
 export const CUSTOMER_SESSION_COOKIE = '__Host-adbl_customer';
 /** Core refuses a longer session token without a lookup. */
 export const MAX_SESSION_TOKEN_LENGTH = 128;
+const SESSION_TOKEN_SHAPE = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_SESSION_TOKEN_LENGTH}}$`);
+
+/** What `customerFromCookies` reads: Next's `cookies()` and `request.cookies`, or any store with the same `get`. */
+export interface CookieReader {
+    get(name: string): { value: string } | undefined;
+}
+
+function cookieValue(header: string, name: string): string | undefined {
+    let found: string | undefined;
+    for (const part of header.split(';')) {
+        const separator = part.indexOf('=');
+        if (separator > 0 && part.slice(0, separator).trim() === name) found = part.slice(separator + 1).trim();
+    }
+    return found;
+}
+
+/**
+ * The portal session token in the request's cookie, or `null` without a well-formed one. Makes no request. Pass it as
+ * `customerSession` to the product and checkout calls so core prices for this customer; `cookies` is a cookie store
+ * (`await cookies()` in Next) or a raw `Cookie` header.
+ */
+export function customerSessionFromCookies(cookies: CookieReader | string | null | undefined): string | null {
+    const raw = typeof cookies === 'string' ? cookieValue(cookies, CUSTOMER_SESSION_COOKIE) : cookies?.get(CUSTOMER_SESSION_COOKIE)?.value;
+    const token = raw?.trim();
+    return token && SESSION_TOKEN_SHAPE.test(token) ? token : null;
+}
 
 export interface CustomerLoginLinkRequest {
     email: string;

@@ -104,3 +104,31 @@ describe('vatNoteOf', () => {
         expect(vatNoteOf(product)).toBe('included');
     });
 });
+
+describe('customer session on product calls', () => {
+    it('noSessionKeepsTheRequestAsBefore', async () => {
+        const { client, fetchMock } = clientRespondingWith(200, [product]);
+
+        await fetchShopProducts(client);
+        await fetchShopProducts(client, { customerSession: null });
+        await fetchShopProduct(client, 12, {});
+
+        for (const [, init] of fetchMock.mock.calls) {
+            expect(init.headers).not.toHaveProperty('X-Customer-Session');
+            expect(init.cache).toBeUndefined();
+        }
+    });
+
+    it('sends the session uncached on the list and on one product', async () => {
+        const { client, fetchMock } = clientRespondingWith(200, [product]);
+
+        await fetchShopProducts(client, { customerSession: 'tok-123' });
+        await fetchShopProduct(client, 12, { customerSession: 'tok-123' });
+
+        for (const [, init] of fetchMock.mock.calls) {
+            expect((init.headers as Record<string, string>)['X-Customer-Session']).toBe('tok-123');
+            expect((init.headers as Record<string, string>)['X-API-Secret-Key']).toBe('k');
+            expect(init.cache).toBe('no-store');
+        }
+    });
+});
