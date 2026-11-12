@@ -76,9 +76,9 @@ interface SubscriptionCheckoutAmounts {
     amount: number;
     /** The first charge again, under the name that pairs with `regularAmount`. */
     firstAmount: number;
-    /** What every later period costs, major units; differs from `firstAmount` while a once-discount applies. Core's figure — never recompute it. */
+    /** What each billing period charges before any discount, VAT included, major units. Core's figure — never recompute it. */
     regularAmount: number;
-    /** What a discount on the plan or the customer brings the price per period to, or absent. */
+    /** What each billing period charges while the discount lasts (`discountDuration`, `discountDurationMonths`); `null` without a discount. */
     discountedAmount: number | null;
     /** How long the discount runs, or absent without one. */
     discountDuration: DiscountDuration | null;

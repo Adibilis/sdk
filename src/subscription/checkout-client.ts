@@ -118,7 +118,7 @@ function checkTerms(request: WireCheckoutRequest, ctx: z.RefinementCtx): void {
 
 function isRepeatableLine(line: DynamicSubscriptionRequest['lineItems'][number]): boolean {
     if (line.productId != null) return line.kind == null || line.kind === 'PRODUCT_LINKED';
-    return line.delivery === true || line.kind == null || line.kind === 'EXTERNAL_PRODUCT';
+    return line.kind == null || line.kind === 'EXTERNAL_PRODUCT';
 }
 
 function checkDynamic(dynamic: DynamicSubscriptionRequest, ctx: z.RefinementCtx): void {
@@ -134,7 +134,7 @@ function checkDynamic(dynamic: DynamicSubscriptionRequest, ctx: z.RefinementCtx)
             ctx.addIssue({
                 code: 'custom',
                 path: ['dynamic', 'lineItems', index],
-                message: 'A dynamic subscription repeats catalog lines (a productId, kind PRODUCT_LINKED), delivery lines and EXTERNAL_PRODUCT lines without a productId only',
+                message: 'A dynamic subscription repeats catalog lines (a productId, kind PRODUCT_LINKED), EXTERNAL_PRODUCT lines without a productId (a delivery line is one of these) only',
             });
         }
     });
@@ -170,8 +170,8 @@ function isRetryableConflict(error: unknown): boolean {
  * Prices a subscription checkout exactly as `startSubscriptionCheckout` would charge its first period, and creates nothing.
  * Show `amount` (and `describeBilling(billingInterval, billingIntervalCount)`), mount Stripe Elements with `publishableKey`,
  * then start with `expectedAmount: preview.amount`. Validated and refused like the real checkout. With a `discountCode` or a
- * discount of the signed-in customer (`customerSession`), `amount` is the first charge and `regularAmount` what every later period
- * costs; a code core could not apply comes back as `discountCodeRefusal`, not as an error.
+ * discount of the signed-in customer (`customerSession`), `amount` is the first charge, `regularAmount` the price per period before
+ * any discount and `discountedAmount` what a period costs while the discount lasts; a code core could not apply comes back as `discountCodeRefusal`, not as an error.
  */
 export async function previewSubscriptionCheckout(
     client: AdibilisClient,

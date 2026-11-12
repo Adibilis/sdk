@@ -211,7 +211,7 @@ describe('catalog and delivery lines in a dynamic cart', () => {
     it.each([
         ['a catalog line', { kind: 'PRODUCT_LINKED', productId: 12, quantity: 1, unitPrice: 24.9 }],
         ['a catalog line without a kind', { productId: 12, quantity: 1, unitPrice: 24.9 }],
-        ['a delivery line', { kind: 'SERVICE', textHtml: 'Delivery', quantity: 1, unitPrice: 24.9, delivery: true }],
+        ['a delivery line', { kind: 'EXTERNAL_PRODUCT', textHtml: 'Delivery', quantity: 1, unitPrice: 24.9, delivery: true }],
     ])('passes %s the local check and sends it', async (_name, line) => {
         const client = mockClient();
         client.post.mockResolvedValue(preview);
@@ -230,11 +230,16 @@ describe('catalog and delivery lines in a dynamic cart', () => {
         expect(client.post).not.toHaveBeenCalled();
     });
 
-    it('still refuses a service line that is not a delivery', async () => {
-        const lines = [{ kind: 'SERVICE', textHtml: 'Wrapping', quantity: 1, unitPrice: 24.9 }];
+    it.each([
+        ['a service line', { kind: 'SERVICE', textHtml: 'Wrapping', quantity: 1, unitPrice: 24.9 }],
+        ['a service delivery line', { kind: 'SERVICE', textHtml: 'Delivery', quantity: 1, unitPrice: 24.9, delivery: true }],
+        ['a note delivery line', { kind: 'NOTE', textHtml: 'Delivery', quantity: 1, unitPrice: 24.9, delivery: true }],
+        ['a catalog line without a productId', { kind: 'PRODUCT_LINKED', textHtml: 'Rose', quantity: 1, unitPrice: 24.9 }],
+    ])('still refuses %s', async (_name, line) => {
         const client = mockClient();
 
-        await expect(previewSubscriptionCheckout(client, { ...request, dynamic: { ...request.dynamic!, lineItems: lines } }, visitor)).rejects.toBeInstanceOf(ZodError);
+        await expect(previewSubscriptionCheckout(client, { ...request, dynamic: { ...request.dynamic!, lineItems: [line] } }, visitor)).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
     });
 });
 
