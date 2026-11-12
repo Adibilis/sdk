@@ -747,6 +747,20 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   `openPriceSteps(range)` lists every choice for a dropdown. It lists **every** step, so a wide range with
   a small step is a long list: for many steps use a numeric input and `isValidOpenPrice`. The chosen price
   goes to checkout as the line's `unitPrice` (see Checkout).
+- **Discounts on an open price.** A price's `discounts` lists every running automatic discount that reaches
+  the product (`{ percent, amountOff, endsAt }`, one of `percent` / `amountOff` set; the customer group's too
+  when the call carried the customer session). `discountedAmount` is computed on the minimum, so for the price
+  the buyer picked use `openPriceDiscount(price, chosen, now?)` (browser-safe): it returns
+  `{ amount, discountedAmount, saving, percent, amountOff, endsAt }` for the winning discount, or `null`. A
+  percent saves `chosen × percent / 100` rounded half up, an amount saves at most the chosen price, the larger
+  saving wins (the first listed on a tie) and ended discounts are ignored. A bouquet at 100 with 10 % shows
+  `90.00`, with CHF 5 off `95.00`, with both `90.00`. Core still prices the charge from the chosen
+  `unitPrice`; this is only what to display.
+
+  ```ts
+  const view = openPriceDiscount(price, chosen);
+  if (view) show(`was ${view.amount}, now ${view.discountedAmount}`);
+  ```
 - **Prices for a signed-in customer.** `fetchShopProducts(core, { customerSession })` and
   `fetchShopProduct(core, id, { customerSession })` take the portal session from
   `customerSessionFromCookies(await cookies())` (a cookie store or a raw `Cookie` header; `null` without

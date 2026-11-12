@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isValidOpenPrice, openPriceSteps, shopPriceView } from '../src/shop/price-view';
+import { isValidOpenPrice, openPriceDiscount, openPriceSteps, shopPriceView } from '../src/shop/price-view';
 
 const now = new Date('2026-11-11T12:00:00Z');
 
@@ -111,5 +111,83 @@ describe('open price range', () => {
         expect(isValidOpenPrice(range, '')).toBe(false);
         expect(isValidOpenPrice(range, 'abc')).toBe(false);
         expect(isValidOpenPrice(range, Number.NaN)).toBe(false);
+    });
+});
+
+describe('openPriceDiscount', () => {
+    const base = { amount: 40 };
+
+    it('applies a percent discount to the chosen price', () => {
+        expect(openPriceDiscount({ ...base, discounts: [{ percent: 10 }] }, 100, now)).toEqual({
+            amount: '100.00',
+            discountedAmount: '90.00',
+            saving: '10.00',
+            percent: '10',
+            amountOff: null,
+            endsAt: null,
+        });
+    });
+
+    it('applies an amount discount', () => {
+        expect(openPriceDiscount({ ...base, discounts: [{ amountOff: 5 }] }, 100, now)).toMatchObject({
+            discountedAmount: '95.00',
+            saving: '5.00',
+            percent: null,
+            amountOff: '5.00',
+        });
+    });
+
+    it('caps an amount discount at the chosen price', () => {
+        expect(openPriceDiscount({ ...base, discounts: [{ amountOff: 50 }] }, 40, now)).toMatchObject({
+            discountedAmount: '0.00',
+            saving: '40.00',
+            amountOff: '50.00',
+        });
+    });
+
+    it('lets the larger discount win, which flips with the chosen price', () => {
+        const price = { ...base, discounts: [{ percent: 10 }, { amountOff: 5 }] };
+        expect(openPriceDiscount(price, 40, now)).toMatchObject({ discountedAmount: '35.00', amountOff: '5.00', percent: null });
+        expect(openPriceDiscount(price, 100, now)).toMatchObject({ discountedAmount: '90.00', percent: '10', amountOff: null });
+    });
+
+    it('keeps the first discount on a tie', () => {
+        const percentFirst = { ...base, discounts: [{ percent: 10 }, { amountOff: 10 }] };
+        expect(openPriceDiscount(percentFirst, 100, now)).toMatchObject({ percent: '10', amountOff: null });
+        const amountFirst = { ...base, discounts: [{ amountOff: 10 }, { percent: 10 }] };
+        expect(openPriceDiscount(amountFirst, 100, now)).toMatchObject({ percent: null, amountOff: '10.00' });
+    });
+
+    it('ignores a discount that ended and one with neither field', () => {
+        const price = {
+            ...base,
+            discounts: [{ percent: 50, endsAt: '2026-11-11T12:00:00Z' }, {}, { percent: null, amountOff: null }, { percent: 10, endsAt: '2026-12-01T00:00:00Z' }],
+        };
+        const result = openPriceDiscount(price, 100, now);
+        expect(result).toMatchObject({ percent: '10', discountedAmount: '90.00' });
+        expect(result?.endsAt).toEqual(new Date('2026-12-01T00:00:00Z'));
+    });
+
+    it('is null without a usable discount', () => {
+        expect(openPriceDiscount(base, 100, now)).toBeNull();
+        expect(openPriceDiscount({ ...base, discounts: null }, 100, now)).toBeNull();
+        expect(openPriceDiscount({ ...base, discounts: [] }, 100, now)).toBeNull();
+        expect(openPriceDiscount({ ...base, discounts: [{ percent: 0 }] }, 100, now)).toBeNull();
+        expect(openPriceDiscount({ ...base, discounts: [{ percent: 10 }] }, 0, now)).toBeNull();
+    });
+
+    it('rounds the percent saving half up', () => {
+        expect(openPriceDiscount({ ...base, discounts: [{ percent: 12.5 }] }, 45, now)).toMatchObject({
+            saving: '5.63',
+            discountedAmount: '39.37',
+            percent: '12.5',
+        });
+    });
+
+    it('reads strings and numbers and formats the percent as core stores it', () => {
+        const result = openPriceDiscount({ ...base, discounts: [{ percent: '12.50' }] }, '80.00', now);
+        expect(result).toMatchObject({ amount: '80.00', saving: '10.00', percent: '12.5' });
+        expect(openPriceDiscount({ ...base, discounts: [{ percent: '10.00' }] }, 50, now)?.percent).toBe('10');
+        expect(openPriceDiscount({ ...base, discounts: [{ amountOff: '5' }] }, 50, now)?.amountOff).toBe('5.00');
     });
 });
