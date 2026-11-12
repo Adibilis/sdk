@@ -1,4 +1,4 @@
-import { add, compareDecimal, formatDecimal, parseDecimal, roundHalfUp, type Decimal } from '../subscription/decimal.js';
+import { add, compareDecimal, formatDecimal, multiply, parseDecimal, roundHalfUp, type Decimal } from '../subscription/decimal.js';
 
 type Amount = number | string;
 
@@ -10,6 +10,16 @@ export interface ShopPriceInput {
     discountEndsAt?: string | null;
     maximumAmount?: Amount | null;
     step?: Amount | null;
+    /** Every running automatic discount that reaches the product; `openPriceDiscount` picks the winner for a chosen price. */
+    discounts?: ShopPriceDiscountInput[] | null;
+}
+
+/** One entry of core's `ShopProductPriceResponse.discounts`: a percent or an amount off, never both. */
+export interface ShopPriceDiscountInput {
+    percent?: Amount | null;
+    amountOff?: Amount | null;
+    /** ISO instant; a discount that ended at or before `now` is ignored. */
+    endsAt?: string | null;
 }
 
 /** The bounds of an open-price product, as decimal strings with two places. */
@@ -94,4 +104,63 @@ export function isValidOpenPrice(range: OpenPriceRange, chosen: Amount): boolean
     const scale = Math.max(value.scale, 2);
     const offset = add(roundHalfUp(value, scale), { units: -minimum.units, scale: 2 });
     return (offset.units % (step.units * 10n ** BigInt(scale - 2))) === 0n;
+}
+
+export type OpenPriceDiscount = {
+    /** The chosen price, decimal string with two places. */
+    amount: string;
+    /** What core charges for it, for display; core still prices the charge. */
+    discountedAmount: string;
+    /** `amount` minus `discountedAmount`. */
+    saving: string;
+    /** The winning discount's percent as core stores it ("10.00" shows "10"); `null` for an amount discount. */
+    percent: string | null;
+    /** The winning amount discount, two places; `null` for a percent discount. */
+    amountOff: string | null;
+    endsAt: Date | null;
+};
+
+const trimmed = (value: Decimal): string => {
+    const text = formatDecimal(value);
+    return text.includes('.') ? text.replace(/\.?0+$/, '') : text;
+};
+
+/**
+ * The discount core applies to the price the buyer chose for an open-price product, from the price's `discounts`:
+ * a percent saves `chosen × percent / 100` rounded half up, an amount saves at most the chosen price, the larger
+ * saving wins and the first listed wins a tie. Discounts that ended at `now` are ignored. `null` when none saves
+ * anything. Core decides the charged amount; this is what to show.
+ */
+export function openPriceDiscount(price: ShopPriceInput, chosen: Amount, now: Date = new Date()): OpenPriceDiscount | null {
+    const amount = money(chosen);
+    let best: { saving: Decimal; percent: Decimal | null; amountOff: Decimal | null; endsAt: Date | null } | null = null;
+    for (const discount of price.discounts ?? []) {
+        const endsAt = discount.endsAt ? new Date(discount.endsAt) : null;
+        if (endsAt !== null && endsAt.getTime() <= now.getTime()) continue;
+        let saving: Decimal;
+        let percent: Decimal | null = null;
+        let amountOff: Decimal | null = null;
+        if (discount.percent != null) {
+            percent = parseDecimal(discount.percent);
+            const product = multiply(amount, percent);
+            saving = roundHalfUp({ units: product.units, scale: product.scale + 2 }, 2);
+        } else if (discount.amountOff != null) {
+            amountOff = money(discount.amountOff);
+            saving = compareDecimal(amountOff, amount) < 0 ? amountOff : amount;
+        } else {
+            continue;
+        }
+        if (saving.units > 0n && (best === null || compareDecimal(saving, best.saving) > 0)) {
+            best = { saving, percent, amountOff, endsAt };
+        }
+    }
+    if (best === null) return null;
+    return {
+        amount: formatDecimal(amount),
+        discountedAmount: formatDecimal(add(amount, { units: -best.saving.units, scale: best.saving.scale })),
+        saving: formatDecimal(best.saving),
+        percent: best.percent === null ? null : trimmed(best.percent),
+        amountOff: best.amountOff === null ? null : formatDecimal(best.amountOff),
+        endsAt: best.endsAt,
+    };
 }
