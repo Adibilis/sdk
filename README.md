@@ -146,6 +146,69 @@ mails the buyer. The shop keeps only `@stripe/stripe-js` / `@stripe/react-stripe
 `returnUrl` must sit on the shop URL (or an allowed extra origin) configured in core's payment
 settings.
 
+### Discounts: a code field, delivery lines, open prices
+
+Core owns every discount; the shop shows what core answers and never recomputes a total. The order
+carries the buyer's code as `order.discountCode`, and the preview and the checkout take an optional
+last argument `{ customerSession }` (see "Prices for a signed-in customer" under Shop catalog).
+
+```typescript
+import { previewCheckout, startCheckout, checkoutRefusalOf } from '@adbls/sdk/server';
+
+const preview = await previewCheckout(core, { ...request, order: { ...order, discountCode: 'SPRING' } }, { customerSession });
+// preview.discountTotal — what the code and the customer's own discounts take off, major units; 0 without one (always present)
+// preview.discountCode — the code core applied; preview.discountCodeRefusal — why it was NOT applied (a DiscountCodeRefusal, or absent)
+// preview.amount is already the discounted total: show it, send it as expectedAmount
+
+try {
+    await startCheckout(core, { ...request, expectedAmount: preview.amount }, { customerSession });
+} catch (error) {
+    const refusal = checkoutRefusalOf(error); // null for anything else: rethrow
+    // CHECKOUT_AMOUNT_CHANGED → preview again, show refusal.amount (also when the session lapsed between preview and start);
+    // CHECKOUT_EXPIRED, CHECKOUT_PAYMENT_IN_PROGRESS, SHOP_PRODUCT_NOT_AVAILABLE → as above;
+    // DISCOUNT_CODE_REFUSED → refusal.reason, the code field's error (nothing was created);
+    // SHOP_PRODUCT_PRICE_OUT_OF_RANGE → refusal.productId: the chosen open price is off the product's range or step;
+    // ORDER_DELIVERY_LINE_WITH_PRODUCT → a delivery line also named a product (a bug in the cart builder)
+}
+```
+
+**A preview does not throw for a bad code.** It prices the cart without the discount and reports why
+in `discountCodeRefusal`; the real checkout refuses the same code with 409 `DISCOUNT_CODE_REFUSED`
+and creates nothing. `checkoutRefusalOf` reads the one-time checkout's refusals, `reason` being `null`
+for a reason this SDK version does not know (still a refused code: show a generic message). Wording
+is the shop's; English examples:
+
+| `DiscountCodeRefusal` | meaning | suggested wording |
+|---|---|---|
+| `UNKNOWN` | no such code | "This code does not exist." |
+| `DISABLED` | the code was switched off | "This code is not active." |
+| `NOT_YET_VALID` | its start date is in the future | "This code is not valid yet." |
+| `EXPIRED` | its end date has passed | "This code has expired." |
+| `USED_UP` | its redemption limit is reached (a generated single-use code already taken) | "This code has been used up." |
+| `ALREADY_USED` | this buyer already redeemed it (once per customer) | "You have already used this code." |
+| `WRONG_CURRENCY` | a fixed-amount code in another currency than the order | "This code does not apply to this currency." |
+| `BELOW_MINIMUM` | the order total is under the code's minimum | "Your order is below this code's minimum." |
+| `NOT_APPLICABLE` | the code is for something else (another target such as subscriptions) or no line of the cart qualifies | "This code does not apply to the items in your cart." |
+| `NOT_BETTER` | a discount the buyer already gets (their own, or free delivery already given) is at least as good; **preview only** — the checkout does not refuse it, it just charges without the code | "Your current discount is already better." |
+| `ZERO_TOTAL` | the code would bring the total to zero (also reported by the preview) | "This code cannot cover the whole order." |
+| `RECIPIENT_ONLY` | the code was issued to a different person | "This code is reserved for another customer." |
+| `NO_DELIVERY` | a free-delivery code on a cart with no delivery line | "This code needs a delivery charge in the cart." |
+
+**Delivery lines.** A delivery charge is an order line with `delivery: true` and **no** `productId`
+(a line that names both is refused with 400 `ORDER_DELIVERY_LINE_WITH_PRODUCT`): a plain charge core
+can recognise. A free-delivery code takes that line off, so a shop that wants to offer one must send its
+delivery as such a line; a cart without one answers the code `NO_DELIVERY`.
+
+**Open-price lines.** For a product with `openPrice` the buyer chooses the price: send it as the
+line's `unitPrice` together with the `productId`. Core requires it on such a line, and refuses one outside the
+product's range or step with 400 `SHOP_PRODUCT_PRICE_OUT_OF_RANGE`. Check it first with
+`isValidOpenPrice(range, chosen)` (see Shop catalog) so the buyer never meets the 400.
+
+**In the React tree** `useCheckout()` carries the code's outcome so the code field and the totals
+share one place: `discount` (`{ code, total, refusal } | null`, the `CheckoutDiscount` type) and
+`setDiscount(...)`, which the shop calls with the preview's `discountCode`, `discountTotal` and
+`discountCodeRefusal`. `goBack()` clears it, because the resubmit prices it again.
+
 ### The buyer's document language
 
 Send `billingPerson.language` (`DE`, `FR`, `IT` or `EN`) on `startCheckout` and `startSubscriptionCheckout`. Core stores it as a
@@ -309,7 +372,7 @@ Core sends the currency upper-case (`CHF`); Stripe wants it lower-case.
   `app.time-zone`), at least the lead time out, at most 365 days out, and a scheduled day of the
   pattern; "start now" is no start date. `validFirstDeliveryDates(entry, schedule, todayIn())`
   lists exactly those dates — pass `todayIn()`, not your server's UTC date.
-- **Dynamic carts:** only `EXTERNAL_PRODUCT` lines without `productId`; core rounds every line's
+- **Dynamic carts:** `EXTERNAL_PRODUCT` lines without `productId` (a delivery line is one of these, with `delivery: true`) and catalog lines (`productId`, kind `PRODUCT_LINKED`); core rounds every line's
   `unitPrice × quantity` half-up to cents, sums, and refuses a `unitAmount` that differs (400
   `SUBSCRIPTION_DYNAMIC_AMOUNT_MISMATCH`). Send `Number(dynamicUnitAmount(lines))` — it sums the
   same way, exactly, where float sums drift.
@@ -324,6 +387,27 @@ Core sends the currency upper-case (`CHF`); Stripe wants it lower-case.
   until its second charge: Stripe's trial only defers that charge, the first cycle is paid at
   checkout. Only a start-date checkout opened before core 1.9.7 reports `SUCCEEDED` for a saved card
   with no money moved; its return page should say "set up", not "paid".
+
+**Discounts (core ≥ v1.9.30).** A subscription is charged per period, so a discount has a duration
+and three figures matter. Send `discountCode` in the request (and `customerSession` in the call
+options, for the customer's own discount); the preview answers:
+
+- `amount` is the **first charge** — what the buyer pays now, and the `expectedAmount` to send; `firstAmount` is the same number under the name that pairs with `regularAmount`.
+- `regularAmount` is what **each period** costs before any discount, VAT included.
+- `discountedAmount` is what a period costs **while the discount lasts** (`null` without one), for
+  `discountDuration` — `ONCE`, `REPEATING` (for `discountDurationMonths` periods) or `FOREVER`.
+- `discountCode` is the code core applied; `discountCodeRefusal` is why it was not (the preview
+  still prices, the checkout refuses with 409 `DISCOUNT_CODE_REFUSED`, same reasons as the
+  table under Checkout, `reason` `null` when this SDK does not know it).
+
+Show the first charge and the regular price side by side ("CHF 8.00 today, then CHF 10.00 a
+week"); never derive one from the other. A dynamic cart may carry catalog lines (`productId`, kind
+`PRODUCT_LINKED`, priced by core, an open price in `unitPrice`) and `delivery: true` lines (no
+`productId`). New refusals read by `subscriptionCheckoutRefusalOf`: 404 `SHOP_PRODUCT_NOT_FOUND`, 400
+`SHOP_PRODUCT_NOT_PRICED` (`productId`, `currency`), 400 `SHOP_PRODUCT_PRICE_OUT_OF_RANGE`
+(`productId`, `currency`), 400 `ORDER_DELIVERY_LINE_WITH_PRODUCT`, 400
+`SUBSCRIPTION_DYNAMIC_PRICE_MODE_MISMATCH` (a product priced in the other price mode than the cart's
+`dynamic.priceMode`).
 
 Each call checks the request locally first — the generated schema plus a subset of core's own term
 rules (one of `planId` / `dynamic`, a schedule shaped for its kind, the cart total, an ISO start
@@ -400,6 +484,11 @@ try {
     response.cookies.set(cleared.name, cleared.value, cleared.options);
 }
 ```
+
+**A customer's own discount.** `CustomerSubscription` and `CustomerSubscriptionDetail` carry
+`discount` (`CustomerSubscriptionDiscount | null`): `name`, `percent` or `amountOff` with `currency`,
+`duration` (`ONCE`, `REPEATING`, `FOREVER`), `months`, `active` and `endsAt`. Show it next to the
+price; `active` is false once it has run its course. The figures are core's — never recompute them.
 
 **The link works once, and is spent by a POST from the page, never by the GET of the link.** The
 first exchange opens a session; any later one — a reload, a second click, the link opened again
@@ -630,6 +719,31 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   collect from, each with its address; an install without the inventory module answers `[]`. A
   `PICKUP` order or subscription checkout names the chosen one as `pickupSiteId`, and core prices
   it by that site's country instead of the delivery address.
+- **Prices carry a discount.** Each price may have `discountedAmount` (the price to charge) and
+  `discountEndsAt`. `shopPriceView(price, product.openPrice, now?)` (browser-safe, `@adbls/sdk`) turns
+  one into what the page shows: `{ amount, discountedAmount, savingPercent, discountEndsAt, openRange }`,
+  decimal strings with two places, `savingPercent` a whole number rounded down. A discount is shown
+  only while `amount > 0`, `0 <= discountedAmount < amount` and its end has not passed at `now` — so a
+  cached page never advertises an offer that is over. Word it yourself ("was CHF 40.00, now CHF 32.00,
+  until 1 Dec").
+- **Open prices.** A product with `openPrice: true` lets the buyer name the price: `amount` is the
+  minimum ("from CHF 20.00") and the price also carries `maximumAmount` and `step`. `shopPriceView(...)`
+  returns them as `openRange` (`{ minimum, maximum, step }`, `null` for an ordinary product);
+  `isValidOpenPrice(range, chosen)` says whether a value is inside the range and on the step grid, and
+  `openPriceSteps(range)` lists every choice for a dropdown. It lists **every** step, so a wide range with
+  a small step is a long list: for many steps use a numeric input and `isValidOpenPrice`. The chosen price
+  goes to checkout as the line's `unitPrice` (see Checkout).
+- **Prices for a signed-in customer.** `fetchShopProducts(core, { customerSession })` and
+  `fetchShopProduct(core, id, { customerSession })` take the portal session from
+  `customerSessionFromCookies(await cookies())` (a cookie store or a raw `Cookie` header; `null` without
+  a well-formed one, no request made) and answer the prices of the customer's group, with
+  `discountedAmount` for that customer. An expired or unknown session is priced as anonymous, not
+  refused. **A session-priced response is per customer and must never be cached for other visitors:**
+  the SDK sends it `cache: 'no-store'`; do not put it in a shared cache (a CDN, `unstable_cache`, ISR). Keep
+  the anonymous catalog cacheable and read the session-priced one only on a request that carries the
+  cookie. `discountedAmount` never reflects a subscription, a generated code or free delivery: those
+  appear in the checkout preview only. Checkout and subscription checkout take the same
+  `{ customerSession }`.
 - **Checkout prices come from here too.** Put `productId` on an order line and core prices it from
   the product's price in the order's `currency`, ignoring `unitPrice`, and recomputes `grandTotal`.
   A product with no price in that currency is refused (`SHOP_PRODUCT_NOT_PRICED`) before any order
@@ -947,7 +1061,11 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: `^1.9.20`,
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.12.0 requires
+`@adbls/api-types` ^1.9.30 / core v1.9.30 or later** (discounts: codes, customer-group prices, open prices,
+delivery lines, the portal's `discount`; against an older core the new fields are absent and the new
+request fields refused). In your own test fixtures the types now require `ShopProductResponse.openPrice`
+and `CheckoutPreview.discountTotal`. `^1.9.20`,
 the first core release with pickup sites (`GET /api/shop/pickup-site`, `pickupSiteId` on an order and a
 subscription checkout) and VAT by country and class (a shop price's `vatRate` is the rate of the
 product's VAT class in the organization's country). `^1.9.14` was the first refusing a subscription
