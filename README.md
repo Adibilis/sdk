@@ -1078,7 +1078,7 @@ delivery lines, the portal's `discount`; against an older core the new response 
 and it silently ignores the new request fields, `discountCode` and `delivery`, so a code is never applied). In your own test fixtures the types now require `ShopProductResponse.openPrice`
 and `CheckoutPreview.discountTotal`.
 
-`^1.9.20`,
+Earlier floors: `^1.9.20` was
 the first core release with pickup sites (`GET /api/shop/pickup-site`, `pickupSiteId` on an order and a
 subscription checkout) and VAT by country and class (a shop price's `vatRate` is the rate of the
 product's VAT class in the organization's country). `^1.9.14` was the first refusing a subscription
