@@ -747,7 +747,7 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   `openPriceSteps(range)` lists every choice for a dropdown. It lists **every** step, so a wide range with
   a small step is a long list: for many steps use a numeric input and `isValidOpenPrice`. The chosen price
   goes to checkout as the line's `unitPrice` (see Checkout).
-- **Discounts on an open price.** A price's `discounts` lists every running automatic discount that reaches
+- **Discounts on an open price (core ≥ v1.9.31).** A price's `discounts` lists every running automatic discount that reaches
   the product (`{ percent, amountOff, endsAt }`, one of `percent` / `amountOff` set; the customer group's too
   when the call carried the customer session). `discountedAmount` is computed on the minimum, so for the price
   the buyer picked use `openPriceDiscount(price, chosen, now?)` (browser-safe): it returns
@@ -1089,15 +1089,19 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.12.0 requires
-`@adbls/api-types` ^1.9.30 / core v1.9.30 or later** (discounts: codes, customer-group prices, open prices,
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.13.0 requires
+`@adbls/api-types` ^1.9.31 / core v1.9.31 or later** (a shop price's `discounts`, read by `openPriceDiscount`; an older core leaves
+the field absent, so `openPriceDiscount` returns `null`; in your own test fixtures the types now require
+`ShopProductPriceResponse.discounts`).
+
+Earlier floors: `^1.9.30` was the first core release with discounts (codes, customer-group prices, open prices,
 delivery lines, the portal's `discount`; an older core ignores the new request fields, `discountCode` and `delivery`, so a code is never applied, and
 leaves the new response fields absent, `CheckoutPreview.discountTotal` included: absent, not `0`). In your own test fixtures the types now require
 `ShopProductResponse.openPrice`, `CheckoutPreview.discountTotal`, the subscription checkout amounts' `firstAmount`, `regularAmount`,
 `discountedAmount`, `discountDuration`, `discountDurationMonths`, `discountCode` and `discountCodeRefusal`, and
 `CustomerSubscription.discount` and `CustomerSubscriptionDetail.discount`.
 
-Earlier floors: `^1.9.20` was
+Before that, `^1.9.20` was
 the first core release with pickup sites (`GET /api/shop/pickup-site`, `pickupSiteId` on an order and a
 subscription checkout) and VAT by country and class (a shop price's `vatRate` is the rate of the
 product's VAT class in the organization's country). `^1.9.14` was the first refusing a subscription
