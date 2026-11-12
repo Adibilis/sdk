@@ -1,3 +1,4 @@
+import { DiscountCodeRefusalModel } from '@adbls/api-types';
 import type { DiscountCodeRefusal } from '@adbls/api-types';
 import { AdibilisApiError } from '../client/errors.js';
 import { amountChangedOf, checkoutExpiredOf, checkoutPaymentInProgressOf, productUnavailableOf } from './checkout-client.js';
@@ -11,8 +12,8 @@ export type CheckoutRefusal =
     | { code: 'CHECKOUT_PAYMENT_IN_PROGRESS' }
     /** 409: no distributor routed to `country` has the line's product in stock; `country` is null when core's catch-all decided. */
     | { code: 'SHOP_PRODUCT_NOT_AVAILABLE'; productId: number; country: string | null }
-    /** 409: the code in the request cannot be redeemed (`reason`); nothing was created. A preview reports the same reason as `discountCodeRefusal` instead. */
-    | { code: 'DISCOUNT_CODE_REFUSED'; reason: DiscountCodeRefusal }
+    /** 409: the code in the request cannot be redeemed (`reason`); nothing was created. A preview reports the same reason as `discountCodeRefusal` instead. `reason` is `null` for a reason this SDK version does not know. */
+    | { code: 'DISCOUNT_CODE_REFUSED'; reason: DiscountCodeRefusal | null }
     /** 400: a catalog line's open price is outside the product's range or step. Show the product's own limits and ask again. */
     | { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE'; productId: number }
     /** 400: a line marked `delivery` also names a product; a delivery line is a plain charge. */
@@ -32,7 +33,7 @@ export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
         if (unavailable !== null) return { code: 'SHOP_PRODUCT_NOT_AVAILABLE', ...unavailable };
         const reason = errorList['DISCOUNT_CODE_REFUSED'];
         if (Array.isArray(reason) && typeof reason[0] === 'string' && reason[0] !== '') {
-            return { code: 'DISCOUNT_CODE_REFUSED', reason: reason[0] as DiscountCodeRefusal };
+            return { code: 'DISCOUNT_CODE_REFUSED', reason: DiscountCodeRefusalModel.options.find((known) => known === reason[0]) ?? null };
         }
         return null;
     }

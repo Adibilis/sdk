@@ -14,6 +14,7 @@ describe('checkoutRefusalOf', () => {
         ['an unavailable product without a country', refusal(409, { SHOP_PRODUCT_NOT_AVAILABLE: ['7', ''] }), { code: 'SHOP_PRODUCT_NOT_AVAILABLE', productId: 7, country: null }],
         ['a refused code', refusal(409, { DISCOUNT_CODE_REFUSED: ['EXPIRED'] }), { code: 'DISCOUNT_CODE_REFUSED', reason: 'EXPIRED' }],
         ['a refused code without delivery', refusal(409, { DISCOUNT_CODE_REFUSED: ['NO_DELIVERY'] }), { code: 'DISCOUNT_CODE_REFUSED', reason: 'NO_DELIVERY' }],
+        ['a refused code with an unknown reason', refusal(409, { DISCOUNT_CODE_REFUSED: ['FROM_THE_FUTURE'] }), { code: 'DISCOUNT_CODE_REFUSED', reason: null }],
         ['an open price out of range', refusal(400, { SHOP_PRODUCT_PRICE_OUT_OF_RANGE: ['12', 'CHF'] }), { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE', productId: 12 }],
         ['a delivery line with a product', refusal(400, { ORDER_DELIVERY_LINE_WITH_PRODUCT: [] }), { code: 'ORDER_DELIVERY_LINE_WITH_PRODUCT' }],
     ])('reads %s', (_name, error, expected) => {

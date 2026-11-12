@@ -37,7 +37,12 @@ export function shopPriceView(price: ShopPriceInput, openPrice: boolean, now: Da
     const amount = money(price.amount);
     const endsAt = price.discountEndsAt ? new Date(price.discountEndsAt) : null;
     const discounted = price.discountedAmount == null ? null : money(price.discountedAmount);
-    const active = discounted !== null && compareDecimal(discounted, amount) < 0 && (endsAt === null || endsAt.getTime() > now.getTime());
+    const active =
+        discounted !== null &&
+        amount.units > 0n &&
+        discounted.units >= 0n &&
+        compareDecimal(discounted, amount) < 0 &&
+        (endsAt === null || endsAt.getTime() > now.getTime());
 
     let savingPercent: number | null = null;
     if (active) {
@@ -58,7 +63,11 @@ export function shopPriceView(price: ShopPriceInput, openPrice: boolean, now: Da
     };
 }
 
-/** Every price the buyer may choose, from the minimum in steps up to the maximum. Empty for a step that is not positive. */
+/**
+ * Every price the buyer may choose, from the minimum in steps up to the maximum. Empty for a step that is not positive.
+ * It lists every step: a wide range with a small step is a long list, so a shop with many steps should take a numeric
+ * input and check it with `isValidOpenPrice` instead.
+ */
 export function openPriceSteps(range: OpenPriceRange): string[] {
     const minimum = money(range.minimum);
     const maximum = money(range.maximum);

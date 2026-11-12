@@ -6,7 +6,7 @@ import type { CustomerSessionResponse } from '../subscription/wire.js';
 import { languageOf } from './language.js';
 import type { CustomerProfile } from './types.js';
 
-/** The cookie that carries the customer's portal session; `customerFromCookies` reads it. */
+/** The cookie that carries the customer's portal session; `customerFromCookies` and `customerSessionFromCookies` read it. */
 export const CUSTOMER_SESSION_COOKIE = '__Host-adbl_customer';
 /** Core refuses a longer session token without a lookup. */
 export const MAX_SESSION_TOKEN_LENGTH = 128;

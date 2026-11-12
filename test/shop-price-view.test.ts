@@ -33,6 +33,20 @@ describe('shopPriceView', () => {
         expect(view).toMatchObject({ amount: '40.00', discountedAmount: null, savingPercent: null, discountEndsAt: null });
     });
 
+    it('has no discount on a zero amount, however the discounted amount looks', () => {
+        expect(shopPriceView({ amount: 0, discountedAmount: -1 }, false, now)).toMatchObject({ amount: '0.00', discountedAmount: null, savingPercent: null });
+        expect(shopPriceView({ amount: 0, discountedAmount: 0 }, false, now)).toMatchObject({ discountedAmount: null, savingPercent: null });
+    });
+
+    it('has no discount on a negative discounted amount', () => {
+        expect(shopPriceView({ amount: 40, discountedAmount: -5 }, false, now)).toMatchObject({ discountedAmount: null, savingPercent: null });
+    });
+
+    it('counts a discount ending exactly now as ended', () => {
+        const view = shopPriceView({ amount: 40, discountedAmount: 32, discountEndsAt: '2026-11-11T12:00:00Z' }, false, now);
+        expect(view).toMatchObject({ discountedAmount: null, discountEndsAt: null });
+    });
+
     it('rounds the saving down', () => {
         expect(shopPriceView({ amount: 30, discountedAmount: 20 }, false, now).savingPercent).toBe(33);
         expect(shopPriceView({ amount: 30, discountedAmount: 10 }, false, now).savingPercent).toBe(66);
