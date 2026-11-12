@@ -67,7 +67,7 @@ export function planUnavailableOf(errorList: Record<string, unknown>): { planId:
     return { planId: Number(params[0]), country };
 }
 
-function productAndCurrencyOf(params: unknown): { productId: number; currency: string } | null {
+export function productAndCurrencyOf(params: unknown): { productId: number; currency: string } | null {
     if (!Array.isArray(params) || typeof params[0] !== 'string' || !/^\d+$/.test(params[0]) || typeof params[1] !== 'string' || params[1] === '') return null;
     return { productId: Number(params[0]), currency: params[1] };
 }

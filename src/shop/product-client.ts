@@ -1,6 +1,6 @@
 import type { ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from '@adbls/api-types';
 import type { AdibilisClient } from '../client/api-client.js';
-import { customerSessionInit } from '../customer/session.js';
+import { customerSessionInit } from '../customer/session-header.js';
 
 export interface ShopProductReadOptions {
     /**

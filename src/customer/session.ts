@@ -6,11 +6,11 @@ import type { CustomerSessionResponse } from '../subscription/wire.js';
 import { languageOf } from './language.js';
 import type { CustomerProfile } from './types.js';
 
+export { SESSION_HEADER } from './session-header.js';
 /** The cookie that carries the customer's portal session; `customerFromCookies` and `customerSessionFromCookies` read it. */
 export const CUSTOMER_SESSION_COOKIE = '__Host-adbl_customer';
 /** Core refuses a longer session token without a lookup. */
 export const MAX_SESSION_TOKEN_LENGTH = 128;
-export const SESSION_HEADER = 'X-Customer-Session';
 const SESSION_TOKEN_SHAPE = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_SESSION_TOKEN_LENGTH}}$`);
 
 /** What `customerFromCookies` reads: Next's `cookies()` and `request.cookies`, or any store with the same `get`. */
@@ -36,11 +36,6 @@ export function customerSessionFromCookies(cookies: CookieReader | string | null
     const raw = typeof cookies === 'string' ? cookieValue(cookies, CUSTOMER_SESSION_COOKIE) : cookies?.get(CUSTOMER_SESSION_COOKIE)?.value;
     const token = raw?.trim();
     return token && SESSION_TOKEN_SHAPE.test(token) ? token : null;
-}
-
-/** The request init that sends the customer's session to core; empty without one, so the call is exactly as before. A session-priced answer is never cacheable. */
-export function customerSessionInit(customerSession: string | null | undefined): { headers?: Record<string, string>; cache?: 'no-store' } {
-    return customerSession ? { headers: { [SESSION_HEADER]: customerSession }, cache: 'no-store' } : {};
 }
 
 export interface CustomerLoginLinkRequest {

@@ -14,7 +14,8 @@ import {
     CustomerScheduleRequestModel,
 } from '../subscription/wire.js';
 import type { CustomerDeliveryPersonRequest, SchedulePattern } from '../subscription/wire.js';
-import { customerSessionFromCookies, SESSION_HEADER } from './session.js';
+import { customerSessionFromCookies } from './session.js';
+import { SESSION_HEADER } from './session-header.js';
 import type { CookieReader } from './session.js';
 import { AdibilisApiError } from '../client/errors.js';
 import type {

@@ -1,7 +1,7 @@
 import { CheckoutRequestModel } from '@adbls/api-types';
 import type { CheckoutRequest, CheckoutResponse, DiscountCodeRefusal, PaymentStatusResponse } from '@adbls/api-types';
 import type { AdibilisClient } from '../client/api-client.js';
-import { customerSessionInit } from '../customer/session.js';
+import { customerSessionInit } from '../customer/session-header.js';
 import { AdibilisApiError } from '../client/errors.js';
 import { shopCallHeaders } from '../subscription/checkout-client.js';
 
@@ -59,6 +59,12 @@ export interface CheckoutPreview {
     discountCodeRefusal?: DiscountCodeRefusal | null;
     preview: true;
 }
+
+type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
+type Holds<T extends true> = T;
+
+// A field core adds to or drops from the checkout response fails this build, not a shop at run time.
+export type CheckoutPreviewMatchesCore = Holds<SameKeys<CheckoutPreview, CheckoutResponse>>;
 
 /**
  * Creates the order in core and opens its Stripe invoice. The response carries everything the

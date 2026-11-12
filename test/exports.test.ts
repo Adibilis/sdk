@@ -27,3 +27,11 @@ describe('export map', () => {
         expect(pkg.exports['.']).not.toEqual(pkg.exports['./server']);
     });
 });
+
+describe('discount types', () => {
+    it.each(['dist/client-entry.d.ts', 'dist/server.d.ts'])('%s exports the refusal and duration types', (file) => {
+        const declarations = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+        expect(declarations).toMatch(/DiscountCodeRefusal/);
+        expect(declarations).toMatch(/DiscountDuration/);
+    });
+});

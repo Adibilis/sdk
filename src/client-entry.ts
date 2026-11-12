@@ -23,6 +23,7 @@ export { isValidOpenPrice, openPriceSteps, shopPriceView } from './shop/price-vi
 export type { OpenPriceRange, ShopPriceInput, ShopPriceView } from './shop/price-view.js';
 export type { ProductPriceResponse, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
 
+export type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
 export { confirmMethodOf, isDynamicEntry } from './subscription/types.js';
 export type {
     BillingInterval,

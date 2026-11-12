@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { AdibilisClient } from '../client/api-client.js';
 import { AdibilisApiError } from '../client/errors.js';
-import { customerSessionInit } from '../customer/session.js';
+import { customerSessionInit } from '../customer/session-header.js';
 import { compareDecimal, formatDecimal, parseDecimal, roundHalfUp } from './decimal.js';
 import { dynamicUnitAmount } from './pricing.js';
 import { isIsoDate, isWellFormedPattern } from './schedule.js';

@@ -4,6 +4,7 @@ import type {
     PaymentStatus,
     PriceMode,
     ScheduleDefinition,
+    SubscriptionCheckoutResponse,
     SubscriptionSecretKind,
     SubscriptionStatus,
 } from './wire.js';
@@ -115,6 +116,15 @@ export interface SubscriptionCheckoutStarted extends SubscriptionCheckoutAmounts
     secretKind: SubscriptionSecretKind;
     preview: false;
 }
+
+type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
+type Holds<T extends true> = T;
+
+// A field core adds to or drops from the subscription checkout response fails this build, not a shop at run time.
+export type SubscriptionCheckoutMatchesCore = [
+    Holds<SameKeys<SubscriptionCheckoutPreview, SubscriptionCheckoutResponse>>,
+    Holds<SameKeys<SubscriptionCheckoutStarted, SubscriptionCheckoutResponse>>,
+];
 
 export interface SubscriptionCheckoutStatus {
     subscriptionId: number;

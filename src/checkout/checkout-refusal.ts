@@ -1,6 +1,7 @@
 import { DiscountCodeRefusalModel } from '@adbls/api-types';
 import type { DiscountCodeRefusal } from '@adbls/api-types';
 import { AdibilisApiError } from '../client/errors.js';
+import { productAndCurrencyOf } from '../subscription/checkout-refusal.js';
 import { amountChangedOf, checkoutExpiredOf, checkoutPaymentInProgressOf, productUnavailableOf } from './checkout-client.js';
 
 export type CheckoutRefusal =
@@ -16,6 +17,10 @@ export type CheckoutRefusal =
     | { code: 'DISCOUNT_CODE_REFUSED'; reason: DiscountCodeRefusal | null }
     /** 400: a catalog line's open price is outside the product's range or step. Show the product's own limits and ask again. */
     | { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE'; productId: number }
+    /** 404: a catalog line's product is not listed any more. Re-read the catalog. */
+    | { code: 'SHOP_PRODUCT_NOT_FOUND' }
+    /** 400: a catalog line's product has no price in `currency`. */
+    | { code: 'SHOP_PRODUCT_NOT_PRICED'; productId: number; currency: string }
     /** 400: a line marked `delivery` also names a product; a delivery line is a plain charge. */
     | { code: 'ORDER_DELIVERY_LINE_WITH_PRODUCT' }
     /** 429: this visitor (or, without `clientIp`, the whole shop server) used up its budget of checkout calls or wrong codes. Wait; do not loop. */
@@ -27,6 +32,7 @@ export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
     const errorList = (error.body as { errorList?: Record<string, unknown> } | null)?.errorList;
     if (errorList == null || typeof errorList !== 'object') return null;
     if (error.status === 429) return 'TOO_MANY_REQUESTS' in errorList ? { code: 'TOO_MANY_REQUESTS' } : null;
+    if (error.status === 404) return 'SHOP_PRODUCT_NOT_FOUND' in errorList ? { code: 'SHOP_PRODUCT_NOT_FOUND' } : null;
     if (error.status === 409) {
         const amount = amountChangedOf(error);
         if (amount !== null) return { code: 'CHECKOUT_AMOUNT_CHANGED', amount };
@@ -41,6 +47,8 @@ export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
         return null;
     }
     if (error.status !== 400) return null;
+    const notPriced = productAndCurrencyOf(errorList['SHOP_PRODUCT_NOT_PRICED']);
+    if (notPriced !== null) return { code: 'SHOP_PRODUCT_NOT_PRICED', ...notPriced };
     const outOfRange = errorList['SHOP_PRODUCT_PRICE_OUT_OF_RANGE'];
     if (Array.isArray(outOfRange) && typeof outOfRange[0] === 'string' && /^\d+$/.test(outOfRange[0])) {
         return { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE', productId: Number(outOfRange[0]) };

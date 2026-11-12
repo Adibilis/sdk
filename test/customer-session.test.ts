@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import { createAdibilisClient } from '../src/client/api-client';
 import { AdibilisApiError } from '../src/client/errors';
-import { customerSessionFromCookies, customerSessionInit, exchangeLoginToken, expiredCustomerSessionCookie, requestLoginLink } from '../src/customer/session';
+import { customerSessionFromCookies, exchangeLoginToken, expiredCustomerSessionCookie, requestLoginLink } from '../src/customer/session';
+import { customerSessionInit } from '../src/customer/session-header';
 
 const visitor = { clientIp: '203.0.113.7' };
 const visitorHeader = { headers: { 'X-Shop-Client-Ip': '203.0.113.7' } };
