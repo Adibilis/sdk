@@ -82,7 +82,7 @@ interface SubscriptionCheckoutAmounts {
     discountedAmount: number | null;
     /** How long the discount runs, or absent without one. */
     discountDuration: DiscountDuration | null;
-    /** The number of periods of a `REPEATING` discount, or absent. */
+    /** How many calendar months a `REPEATING` discount lasts, whatever the billing interval (Stripe's `duration_in_months`), or absent. */
     discountDurationMonths: number | null;
     /** The code core applied, or absent. */
     discountCode: string | null;

@@ -155,13 +155,15 @@ last argument `{ customerSession }` (see "Prices for a signed-in customer" under
 ```typescript
 import { previewCheckout, startCheckout, checkoutRefusalOf } from '@adbls/sdk/server';
 
-const preview = await previewCheckout(core, { ...request, order: { ...order, discountCode: 'SPRING' } }, { customerSession });
+const withCode = { ...request, order: { ...order, discountCode: 'SPRING' } };   // build it once: preview and start must carry the same code
+const visitor = { customerSession, clientIp: visitorIpOf(request) };             // the buyer's IP literal as your server saw it
+const preview = await previewCheckout(core, withCode, visitor);
 // preview.discountTotal — what the code and the customer's own discounts take off, major units; 0 without one (always present)
 // preview.discountCode — the code core applied; preview.discountCodeRefusal — why it was NOT applied (a DiscountCodeRefusal, or absent)
 // preview.amount is already the discounted total: show it, send it as expectedAmount
 
 try {
-    await startCheckout(core, { ...request, expectedAmount: preview.amount }, { customerSession });
+    await startCheckout(core, { ...withCode, expectedAmount: preview.amount }, visitor); // without the code core prices without it: 409 CHECKOUT_AMOUNT_CHANGED
 } catch (error) {
     const refusal = checkoutRefusalOf(error); // null for anything else: rethrow
     // CHECKOUT_AMOUNT_CHANGED → preview again, show refusal.amount (also when the session lapsed between preview and start);
@@ -169,12 +171,20 @@ try {
     // DISCOUNT_CODE_REFUSED → refusal.reason, the code field's error (nothing was created);
     // SHOP_PRODUCT_PRICE_OUT_OF_RANGE → refusal.productId: the chosen open price is off the product's range or step;
     // ORDER_DELIVERY_LINE_WITH_PRODUCT → a delivery line also named a product (a bug in the cart builder)
+    // TOO_MANY_REQUESTS → this visitor used up their budget: wait, do not loop
 }
 ```
 
+**Pass `clientIp` and preview on submit.** Give every `previewCheckout`, `startCheckout` and
+`getOrderStatus(core, source, ref, { clientIp })` that carries a code field the visitor's IP from your
+request (an IPv4 or IPv6 literal; anything else is a `ZodError`). Core allows 10 checkout calls per
+visitor a minute and counts 10 wrong codes per visitor per 10 minutes; without `clientIp` all visitors
+share the shop's budget, so one guesser locks codes for everyone (429, `TOO_MANY_REQUESTS`). Preview
+when the buyer submits or applies the code, never on every keystroke: each partial code is a wrong one.
+
 **A preview does not throw for a bad code.** It prices the cart without the discount and reports why
 in `discountCodeRefusal`; the real checkout refuses the same code with 409 `DISCOUNT_CODE_REFUSED`
-and creates nothing. `checkoutRefusalOf` reads the one-time checkout's refusals, `reason` being `null`
+and creates nothing (except `NOT_BETTER`, which is never refused: see the table). `checkoutRefusalOf` reads the one-time checkout's refusals, `reason` being `null`
 for a reason this SDK version does not know (still a refused code: show a generic message). Wording
 is the shop's; English examples:
 
@@ -189,8 +199,8 @@ is the shop's; English examples:
 | `WRONG_CURRENCY` | a fixed-amount code in another currency than the order | "This code does not apply to this currency." |
 | `BELOW_MINIMUM` | the order total is under the code's minimum | "Your order is below this code's minimum." |
 | `NOT_APPLICABLE` | the code is for something else (another target such as subscriptions) or no line of the cart qualifies | "This code does not apply to the items in your cart." |
-| `NOT_BETTER` | a discount the buyer already gets (their own, or free delivery already given) is at least as good; **preview only** — the checkout does not refuse it, it just charges without the code | "Your current discount is already better." |
-| `ZERO_TOTAL` | the code would bring the total to zero (also reported by the preview) | "This code cannot cover the whole order." |
+| `NOT_BETTER` | a discount the buyer already gets (their own, or free delivery already given) is at least as good; never a 409: the preview and the real checkout both report it as `discountCodeRefusal` and the checkout charges without the code | "Your current discount is already better." |
+| `ZERO_TOTAL` | the code would bring the total below the currency's minimum charge (CHF 0.50), not only to zero (a 409 on the checkout, `discountCodeRefusal` on the preview) | "This code cannot cover the whole order." |
 | `RECIPIENT_ONLY` | the code was issued to a different person | "This code is reserved for another customer." |
 | `NO_DELIVERY` | a free-delivery code on a cart with no delivery line | "This code needs a delivery charge in the cart." |
 
@@ -395,7 +405,8 @@ options, for the customer's own discount); the preview answers:
 - `amount` is the **first charge** — what the buyer pays now, and the `expectedAmount` to send; `firstAmount` is the same number under the name that pairs with `regularAmount`.
 - `regularAmount` is what **each period** costs before any discount, VAT included.
 - `discountedAmount` is what a period costs **while the discount lasts** (`null` without one), for
-  `discountDuration` — `ONCE`, `REPEATING` (for `discountDurationMonths` periods) or `FOREVER`.
+  `discountDuration` — `ONCE`, `REPEATING` (for `discountDurationMonths` calendar months, not periods: on a weekly subscription 3 months is about 13
+  deliveries, so never word it as "your first 3 deliveries") or `FOREVER`.
 - `discountCode` is the code core applied; `discountCodeRefusal` is why it was not (the preview
   still prices, the checkout refuses with 409 `DISCOUNT_CODE_REFUSED`, same reasons as the
   table under Checkout, `reason` `null` when this SDK does not know it).
@@ -1063,9 +1074,11 @@ and you can depend on it directly when you build beyond what the SDK wraps.
 
 The dependency range here is the statement of *which core releases this SDK speaks to*: **0.12.0 requires
 `@adbls/api-types` ^1.9.30 / core v1.9.30 or later** (discounts: codes, customer-group prices, open prices,
-delivery lines, the portal's `discount`; against an older core the new fields are absent and the new
-request fields refused). In your own test fixtures the types now require `ShopProductResponse.openPrice`
-and `CheckoutPreview.discountTotal`. `^1.9.20`,
+delivery lines, the portal's `discount`; against an older core the new response fields are absent
+and it silently ignores the new request fields, `discountCode` and `delivery`, so a code is never applied). In your own test fixtures the types now require `ShopProductResponse.openPrice`
+and `CheckoutPreview.discountTotal`.
+
+`^1.9.20`,
 the first core release with pickup sites (`GET /api/shop/pickup-site`, `pickupSiteId` on an order and a
 subscription checkout) and VAT by country and class (a shop price's `vatRate` is the rate of the
 product's VAT class in the organization's country). `^1.9.14` was the first refusing a subscription
