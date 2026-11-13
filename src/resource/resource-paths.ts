@@ -1,7 +1,7 @@
 import { shopImageUrl } from '../shop/product-image.js';
 
 const WEBSITE_FILE_PATH = /^\/api\/website\/resource\/(\d+)\/file\/(\d+)$/;
-const PUBLIC_MEDIA_PATH = /^\/api\/public\/media\/resource\/\d+\/[^/?#]+$/;
+const PUBLIC_MEDIA_PATH = /^\/api\/public\/media\/resource\/\d+\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const IMG_TAG = /<img\b[^>]*>/gi;
 const IMG_SRC = /(\ssrc=")([^"]*)(")/i;
 

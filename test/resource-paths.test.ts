@@ -22,6 +22,8 @@ describe('resourceAssetUrl', () => {
             '/api/website/resource/7/file/abc',
             '/api/public/media/product/1/a.png',
             '//evil.test/x',
+            '/api/public/media/resource/7/a.png\n',
+            '/api/public/media/resource/7/..',
         ]) {
             expect(resourceAssetUrl(path, options), path).toBeNull();
         }
@@ -41,6 +43,12 @@ describe('rewriteResourceBody', () => {
 
     it('drops an image with a source it does not know', () => {
         expect(rewriteResourceBody('<p>a<img src="/api/images/media/resource/7/x.png" alt="x">b</p>', options)).toBe('<p>ab</p>');
+    });
+
+    it('keeps an escaped angle bracket in an attribute untouched', () => {
+        expect(rewriteResourceBody('<img alt="a&gt;b" src="/api/website/resource/7/file/31">', options)).toBe(
+            '<img alt="a&gt;b" src="/api/resource/7/file/31">'
+        );
     });
 
     it('leaves a body without images unchanged', () => {
