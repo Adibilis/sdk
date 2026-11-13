@@ -7,8 +7,8 @@ export interface CancelledBooking {
     startAt: string;
 }
 
-/** Compile-time check that `CancelledBooking` keeps core's keys. */
-export type CancelledBookingMatchesCore = Holds<SameKeys<CancelledBooking, CancelledBookingResponse>>;
+// Compile-time check that `CancelledBooking` keeps core's keys.
+type MatchesCore = [Holds<SameKeys<CancelledBooking, CancelledBookingResponse>>];
 
 /** True when the studio cancelled this product's class at that instant; an unparsable `startAt` never matches. */
 export function isBookingCancelled(productId: number, startAt: string, cancelled: readonly CancelledBooking[]): boolean {

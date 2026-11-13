@@ -40,7 +40,7 @@ describe('isBookingCancelled', () => {
     });
 
     it('is false for an unparsable entry date', () => {
-        expect(isBookingCancelled(3, 'not a date', [{ productId: 3, startAt: 'not a date' }])).toBe(false);
+        expect(isBookingCancelled(3, '2026-11-05T16:00:00Z', [{ productId: 3, startAt: 'not a date' }])).toBe(false);
     });
 
     it('is false for an empty list', () => {
