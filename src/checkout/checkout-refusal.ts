@@ -15,6 +15,8 @@ export type CheckoutRefusal =
     | { code: 'SHOP_PRODUCT_NOT_AVAILABLE'; productId: number; country: string | null }
     /** 409: the code in the request cannot be redeemed (`reason`); nothing was created. A preview reports the same reason as `discountCodeRefusal` instead. `reason` is `null` for a reason this SDK version does not know. */
     | { code: 'DISCOUNT_CODE_REFUSED'; reason: DiscountCodeRefusal | null }
+    /** 409: the line's class date was cancelled by the studio; drop it from the cart and re-read the cancelled dates. */
+    | { code: 'BOOKING_DATE_CANCELLED'; productId: number | null; startAt: string | null }
     /** 400: a catalog line's open price is outside the product's range or step. Show the product's own limits and ask again. */
     | { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE'; productId: number }
     /** 404: a catalog line's product is not listed any more. Re-read the catalog. */
@@ -25,6 +27,11 @@ export type CheckoutRefusal =
     | { code: 'ORDER_DELIVERY_LINE_WITH_PRODUCT' }
     /** 429: this visitor (or, without `clientIp`, the whole shop server) used up its budget of checkout calls or wrong codes. Wait; do not loop. */
     | { code: 'TOO_MANY_REQUESTS' };
+
+/** A product id core sent as a digit-only string, or `null` for anything else. */
+function productIdOf(value: unknown): number | null {
+    return typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : null;
+}
 
 /** Core's refusal of a one-time checkout or preview in a form a shop can act on, or `null` for any other error. */
 export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
@@ -44,14 +51,21 @@ export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
         if (Array.isArray(reason) && typeof reason[0] === 'string' && reason[0] !== '') {
             return { code: 'DISCOUNT_CODE_REFUSED', reason: DiscountCodeRefusalModel.options.find((known) => known === reason[0]) ?? null };
         }
+        const cancelled = errorList['BOOKING_DATE_CANCELLED'];
+        if (Array.isArray(cancelled)) {
+            return {
+                code: 'BOOKING_DATE_CANCELLED',
+                productId: productIdOf(cancelled[0]),
+                startAt: typeof cancelled[1] === 'string' && cancelled[1] !== '' ? cancelled[1] : null,
+            };
+        }
         return null;
     }
     if (error.status !== 400) return null;
     const notPriced = productAndCurrencyOf(errorList['SHOP_PRODUCT_NOT_PRICED']);
     if (notPriced !== null) return { code: 'SHOP_PRODUCT_NOT_PRICED', ...notPriced };
     const outOfRange = errorList['SHOP_PRODUCT_PRICE_OUT_OF_RANGE'];
-    if (Array.isArray(outOfRange) && typeof outOfRange[0] === 'string' && /^\d+$/.test(outOfRange[0])) {
-        return { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE', productId: Number(outOfRange[0]) };
-    }
+    const outOfRangeProductId = Array.isArray(outOfRange) ? productIdOf(outOfRange[0]) : null;
+    if (outOfRangeProductId !== null) return { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE', productId: outOfRangeProductId };
     return 'ORDER_DELIVERY_LINE_WITH_PRODUCT' in errorList ? { code: 'ORDER_DELIVERY_LINE_WITH_PRODUCT' } : null;
 }

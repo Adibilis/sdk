@@ -22,6 +22,11 @@ export interface AdibilisClient {
     download(path: string, init?: RequestInit): Promise<Response>;
 }
 
+/** The path with the value of a `token` query parameter replaced, so a live cancellation token never lands in an error. */
+function redactedPath(path: string): string {
+    return path.replace(/([?&]token=)[^&#]*/g, '$1redacted');
+}
+
 /**
  * Server-side client for the Adibilis CORE API.
  *
@@ -49,10 +54,10 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
         if (!response.ok) {
             if (discardNonJsonError && !isJson(response)) {
                 void response.body?.cancel();
-                throw new AdibilisApiError(response.status, null, path);
+                throw new AdibilisApiError(response.status, null, redactedPath(path));
             }
             // Only status, body and path — see AdibilisApiError on why the key never travels along.
-            throw new AdibilisApiError(response.status, await parseBody(response), path);
+            throw new AdibilisApiError(response.status, await parseBody(response), redactedPath(path));
         }
         return response;
     }

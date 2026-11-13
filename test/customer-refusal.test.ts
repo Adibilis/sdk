@@ -19,6 +19,10 @@ describe('customerRefusalOf', () => {
         ['an unknown delivery', listed(404, 'SUBSCRIPTION_DELIVERY_NOT_FOUND'), { code: 'SUBSCRIPTION_DELIVERY_NOT_FOUND' }],
         ["another customer's invoice", listed(404, 'INVOICE_NOT_FOUND'), { code: 'INVOICE_NOT_FOUND' }],
         ['an unlisted plan', listed(404, 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND'), { code: 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND' }],
+        ["another customer's order", listed(404, 'ORDER_NOT_FOUND'), { code: 'ORDER_NOT_FOUND' }],
+        ['an order past cancelling', listed(409, 'ORDER_NOT_CANCELLABLE', ['FULFILLED']), { code: 'ORDER_NOT_CANCELLABLE', status: 'FULFILLED' }],
+        ['an order cancelled already', listed(409, 'ORDER_ALREADY_CANCELLED'), { code: 'ORDER_ALREADY_CANCELLED' }],
+        ['an order that cannot be refunded', listed(409, 'ORDER_NOT_REFUNDABLE'), { code: 'ORDER_NOT_REFUNDABLE' }],
         [
             'an action the state forbids, with its reason',
             listed(409, 'SUBSCRIPTION_ACTION_NOT_ALLOWED', ['CANCELLING']),

@@ -5,6 +5,9 @@ export { createAdibilisClient } from './client/api-client.js';
 export type { AdibilisClient, AdibilisClientConfig } from './client/api-client.js';
 export { AdibilisApiError } from './client/errors.js';
 export { fetchHolidays } from './shop/holidays-client.js';
+export { fetchCancelledBookings } from './shop/booking-client.js';
+export { isBookingCancelled } from './shop/booking-rules.js';
+export type { CancelledBooking } from './shop/booking-rules.js';
 export { fetchPickupSites } from './shop/pickup-site-client.js';
 export { checkCore } from './status/core-check.js';
 export type { CoreCheck, CoreCheckOptions } from './status/core-check.js';
@@ -88,7 +91,12 @@ export { subscriptionCheckoutRefusalOf } from './subscription/checkout-refusal.j
 export type { SubscriptionCheckoutRefusal } from './subscription/checkout-refusal.js';
 
 export type {
+    CancellationCause,
     CustomerInvoicePdf,
+    CustomerOrder,
+    CustomerOrderLine,
+    OrderRefund,
+    RefundStatus,
     CustomerPage,
     CustomerPaymentMethodSetup,
     CustomerPaymentMethodUpdate,
@@ -121,6 +129,9 @@ export type {
 } from './customer/customer-client.js';
 export { customerRefusalOf } from './customer/refusal.js';
 export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';
+export { cancelOrderByToken, getOrderCancellation } from './order/cancellation.js';
+export { orderCancellationRefusalOf } from './order/refusal.js';
+export type { OrderCancellationRefusal, OrderRefusal } from './order/refusal.js';
 export { getResource, listResourceProducts, listResources, listResourceTopics, resourceFile } from './resource/resource-client.js';
 export type {
     ResourceCallOptions,

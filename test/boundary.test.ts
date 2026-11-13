@@ -113,6 +113,21 @@ describe('entry point boundary', () => {
     });
 
     /**
+     * Cancelling by link and reading the cancelled dates both carry the key. The booking rules next to the dates client
+     * (`isBookingCancelled`) run in the browser, so the two sit in different files. Same folder, two sides.
+     */
+    it('the browser entry reaches the booking rules but neither cancellation client', () => {
+        const browser = rel(reachableFrom(resolve(DIST, 'client-entry.js')));
+        const server = rel(reachableFrom(resolve(DIST, 'server.js')));
+        for (const file of ['order/cancellation.js', 'shop/booking-client.js']) {
+            expect(browser, file).not.toContain(file);
+            expect(server, file).toContain(file);
+        }
+        expect(browser).toContain('shop/booking-rules.js');
+        expect(server).toContain('shop/booking-rules.js');
+    });
+
+    /**
      * The resource client carries the key and a customer's session, and its file call streams member-only files: none of that may
      * ship to a browser. The path helpers next to it only compose URLs and rewrite an article body, and run in the browser.
      */

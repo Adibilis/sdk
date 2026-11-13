@@ -1,4 +1,6 @@
 import { AdibilisApiError } from '../client/errors.js';
+import { orderRefusalIn } from '../order/refusal.js';
+import type { OrderRefusal } from '../order/refusal.js';
 import { planUnavailableOf } from '../subscription/checkout-refusal.js';
 import { SubscriptionUpdateError } from './customer-client.js';
 
@@ -41,6 +43,9 @@ export type CustomerRefusal =
     | { code: 'INVOICE_NOT_FOUND' }
     /** 404: the plan is not listed for this subscription's currency (any more). Re-read the catalog. */
     | { code: 'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND' }
+    /** 404: no such order among the customer's (another customer's id answers the same). */
+    | { code: 'ORDER_NOT_FOUND' }
+    | OrderRefusal
     /** 409: not in this state; `reason` says which (`null` for a reason this SDK does not know yet). Re-read the subscription. */
     | { code: 'SUBSCRIPTION_ACTION_NOT_ALLOWED'; reason: SubscriptionActionRefusalReason | null }
     /** 409: the delivery is too close (or no longer planned) to skip. */
@@ -83,6 +88,7 @@ type ListedCode = Exclude<
     | 'SUBSCRIPTION_CONFIGURATION_INVALID'
     | 'SUBSCRIPTION_PAUSE_DATE_INVALID'
     | 'SUBSCRIPTION_PLAN_NOT_AVAILABLE'
+    | OrderRefusal['code']
 >;
 
 const LISTED: Record<number, readonly ListedCode[]> = {
@@ -105,6 +111,7 @@ const LISTED: Record<number, readonly ListedCode[]> = {
         'SUBSCRIPTION_DELIVERY_NOT_FOUND',
         'INVOICE_NOT_FOUND',
         'SHOP_SUBSCRIPTION_PLAN_NOT_FOUND',
+        'ORDER_NOT_FOUND',
     ],
     409: ['SUBSCRIPTION_DELIVERY_NOT_SKIPPABLE', 'SUBSCRIPTION_PAYMENT_METHOD_UNAVAILABLE', 'CONCURRENT_UPDATE_CONFLICT'],
     429: ['TOO_MANY_REQUESTS'],
@@ -131,6 +138,8 @@ export function customerRefusalOf(error: unknown): CustomerRefusal | null {
     if (cause.status === 409) {
         const unavailable = planUnavailableOf(errorList);
         if (unavailable !== null) return { code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE', ...unavailable };
+        const order = orderRefusalIn(cause.status, errorList);
+        if (order !== null) return order;
     }
     if (cause.status !== 400) return null;
     const violations = Array.isArray(body?.violations) ? (body.violations as Violation[]) : [];
