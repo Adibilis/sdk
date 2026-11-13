@@ -252,7 +252,7 @@ export interface OrderRefund {
     refundedAt: string | null;
 }
 
-/** An order as core shows it behind the cancellation link. Dates are instants (ISO-8601 timestamps). */
+/** An order as core shows it behind the cancellation link and in the portal. Dates are instants (ISO-8601 timestamps). */
 export interface CustomerOrder {
     orderId: number;
     orderNumber: string;

@@ -12,11 +12,11 @@ export type OrderRefusal =
 
 export type OrderCancellationRefusal =
     | OrderRefusal
-    /** 401: the mailed link was used up, expired, replaced by a newer one or never existed. */
+    /** 401: the token is malformed or forged, the studio rotated the link secret, or the order no longer exists. A used link is not refused: it answers 200 with a cancelled order. */
     | { code: 'ORDER_CANCELLATION_TOKEN_INVALID' }
     /** 404: core's shop module is off. */
     | { code: 'SHOP_MODULE_DISABLED' }
-    /** 429: this visitor used up the budget of cancels (5 a minute). Wait; do not loop. */
+    /** 429: this visitor used up the budget of this call (5 cancels or 60 reads per visitor a minute). Wait; do not loop. */
     | { code: 'TOO_MANY_REQUESTS' };
 
 /** Reads the order refusals core answers with on 409, or `null` for any other answer. */

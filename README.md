@@ -712,15 +712,25 @@ origin, e.g. `https://kaemo.ch/stornieren`). Core mails the buyer `<cancellation
 page calls `getOrderCancellation(core, token, { clientIp })`, shows the booking, and on confirm calls
 `cancelOrderByToken(core, token, { clientIp })`. Both are server-only and return a `CustomerOrder`.
 
+The link stays valid after use: the token is a stateless signature over the order id, it never expires
+and is the same in every mail for that order. A re-opened link answers 200 with
+`orderStatus: 'CANCELLED'` and the refund, and `cancelOrderByToken` then answers 409
+`ORDER_ALREADY_CANCELLED`. So the page checks `orderStatus === 'CANCELLED'` first and shows the
+cancelled order with its refund; only an uncancelled order shows the booking and the cancel button.
+
 ```typescript
 import { getOrderCancellation, cancelOrderByToken, orderCancellationRefusalOf } from '@adbls/sdk/server';
 
 const visitor = { clientIp: visitorIpOf(request) };
 try {
     const order = await getOrderCancellation(core, token, visitor);   // GET: changes nothing, safe to load on page view
-    // show order.lines, and the button only while the shop's own deadline has not passed
-    const cancelled = await cancelOrderByToken(core, token, visitor); // on the buyer's confirm, never on page load
-    // cancelled.refund.status says what to tell the buyer, see below
+    if (order.orderStatus === 'CANCELLED') {
+        // a re-opened link: show the cancelled order and order.refund.status, no button
+    } else {
+        // show order.lines, and the button only while the shop's own deadline has not passed
+        const cancelled = await cancelOrderByToken(core, token, visitor); // on the buyer's confirm, never on page load
+        // cancelled.refund.status says what to tell the buyer, see below
+    }
 } catch (error) {
     const refusal = orderCancellationRefusalOf(error); // null for anything else: rethrow
 }
@@ -742,18 +752,21 @@ that is past cancelling for its own reasons (`ORDER_NOT_CANCELLABLE`).
 | `SUCCEEDED` | cancelled and refunded on `refundedAt` |
 | `FAILED` | cancelled; the studio settles the refund with the buyer. This is a 200 answer, not an error: do not show a failure page |
 
+`NONE` is also what a live, uncancelled order answers, so this table applies once the order is
+cancelled (`orderStatus === 'CANCELLED'`).
+
 `cancellationCause` says who cancelled (`CancellationCause`), `cancelledAt` when.
 
 **Refusals.** `orderCancellationRefusalOf(error)` reads them; `null` means rethrow.
 
 | `code` | status | what to do |
 |---|---|---|
-| `ORDER_CANCELLATION_TOKEN_INVALID` | 401 | the link was used, expired, replaced by a newer mail or never existed: say so; the buyer can ask the studio |
+| `ORDER_CANCELLATION_TOKEN_INVALID` | 401 | the token is malformed or forged, the studio rotated the link secret, or the order no longer exists (a used link is not a 401, see above): say the link is not valid; the buyer can ask the studio |
 | `ORDER_ALREADY_CANCELLED` | 409 | show the order as cancelled (read it again for the refund) |
 | `ORDER_NOT_CANCELLABLE` | 409 | past the point where a customer can cancel; `status` is the order's status, `null` for one this SDK does not know. Show "please contact the studio" |
 | `ORDER_NOT_REFUNDABLE` | 409 | paid in a way core cannot refund; nothing changed. Ask the studio |
 | `SHOP_MODULE_DISABLED` | 404 | core's shop module is off; the page is closed |
-| `TOO_MANY_REQUESTS` | 429 | this visitor used up 5 cancels a minute; wait, do not loop |
+| `TOO_MANY_REQUESTS` | 429 | this visitor used up 5 cancels or 60 reads a minute; wait, do not loop |
 
 **Signed in.** On the account pages, `customerFromCookies(...)` gives a client with `listOrders({ page, pageSize })`,
 `getOrder(id)` and `cancelOrder(id)`. They answer `CustomerOrder`s (a page of them for the list);
@@ -1245,8 +1258,8 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/customer/invoice/{id}/pdf` | the PDF of an invoice in the signed-in customer's transactions (`invoicePdf`); 404 `INVOICE_NOT_FOUND` for any other; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `POST\|PATCH /api/customer/subscription/{id}/payment-method` | the card change (`beginPaymentMethodUpdate`, `confirmPaymentMethod`); 429 beyond 5 per visitor or 120 per shop server a minute, and beyond 10 SetupIntents per customer an hour |
-| `GET /api/payment/order/cancellation?token=` | the order behind a cancellation mail's token (`getOrderCancellation`); 401 `ORDER_CANCELLATION_TOKEN_INVALID` for a used, expired or unknown link; can also answer 404 `SHOP_MODULE_DISABLED` and 429 |
-| `POST /api/payment/order/cancel` | cancels that order and refunds it (`cancelOrderByToken`); 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`, `ORDER_NOT_REFUNDABLE`; 401 `ORDER_CANCELLATION_TOKEN_INVALID`; 404 `SHOP_MODULE_DISABLED`; 429 beyond 5 per visitor a minute |
+| `GET /api/payment/order/cancellation?token=` | the order behind a cancellation mail's token (`getOrderCancellation`); 401 `ORDER_CANCELLATION_TOKEN_INVALID` for a malformed or forged token, a rotated link secret or an order that no longer exists (never for a used or old link); can also answer 404 `SHOP_MODULE_DISABLED`; 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `POST /api/payment/order/cancel` | cancels that order and refunds it (`cancelOrderByToken`); 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`, `ORDER_NOT_REFUNDABLE`; 401 `ORDER_CANCELLATION_TOKEN_INVALID`; 404 `SHOP_MODULE_DISABLED`; 429 beyond 5 per visitor or 120 per shop server a minute |
 | `GET /api/customer/order` | one page of the signed-in customer's one-time orders (`listOrders`, `X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
 | `GET /api/customer/order/{id}` | one order of the signed-in customer's (`getOrder`); 404 `ORDER_NOT_FOUND` for another customer's |
 | `POST /api/customer/order/{id}/cancel` | the customer cancels and refunds an order (`cancelOrder`); the same 409 refusals as by link |
