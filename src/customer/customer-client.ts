@@ -397,7 +397,7 @@ export class CustomerClient {
 
     /**
      * Ends the session in core; answers the same for a session that is gone already. Clear the cookie as well, always. It can
-     * still be refused: 404 `SHOP_MODULE_DISABLED`, 429 `TOO_MANY_REQUESTS` (shared with sign-ins, 30 per visitor a minute) —
+     * still be refused: 404 `CUSTOMER_SIGN_IN_DISABLED`, 429 `TOO_MANY_REQUESTS` (shared with sign-ins, 30 per visitor a minute) —
      * clear the cookie anyway.
      */
     async logout(): Promise<void> {

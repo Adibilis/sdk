@@ -2,7 +2,7 @@ import type { AdibilisClient } from '../client/api-client.js';
 import { shopCallHeaders } from '../subscription/checkout-client.js';
 import type { ShopCallOptions } from '../subscription/checkout-client.js';
 import { CustomerLoginLinkRequestModel, CustomerSessionRequestModel } from '../subscription/wire.js';
-import type { CustomerSessionResponse } from '../subscription/wire.js';
+import type { CustomerLoginPurpose, CustomerSessionResponse } from '../subscription/wire.js';
 import { languageOf } from './language.js';
 import type { CustomerProfile } from './types.js';
 
@@ -49,6 +49,11 @@ export interface CustomerLoginLinkRequest {
     language?: string | null;
     /** Names the shop in the mail; core's organization name when absent. At most 80 characters. */
     shopName?: string | null;
+    /**
+     * `'RESOURCES'` mails the resources sign-in to any contact, with `returnUrl`'s origin checked against core's
+     * `RESOURCES_ALLOWED_ORIGINS`; absent or `'SHOP'` is the shop sign-in.
+     */
+    purpose?: CustomerLoginPurpose | null;
 }
 
 export interface CustomerSessionCookie {
@@ -103,7 +108,9 @@ export function expiredCustomerSessionCookie(): CustomerSessionCookie {
  * a customer. Only a customer with a paid order or subscription gets a mail; a new link replaces the unused older ones.
  *
  * Refused: 400 `SHOP_ORIGIN_NOT_ALLOWED` (`returnUrl` outside core's allowed shop origins — a setup error), 429 beyond 5 links per
- * visitor a minute (or 120 per shop server; 5 an hour per address are dropped silently), 404 `SHOP_MODULE_DISABLED`.
+ * visitor a minute (or 120 per shop server; 5 an hour per address are dropped silently), 404 `SHOP_MODULE_DISABLED`. With the
+ * `'RESOURCES'` purpose: 400 `RESOURCES_ORIGIN_NOT_ALLOWED` (`returnUrl` outside core's `RESOURCES_ALLOWED_ORIGINS`) and
+ * 404 `RESOURCES_MODULE_DISABLED` instead.
  */
 export async function requestLoginLink(client: AdibilisClient, request: CustomerLoginLinkRequest, options: ShopCallOptions): Promise<void> {
     const headers = shopCallHeaders(options);
@@ -112,6 +119,7 @@ export async function requestLoginLink(client: AdibilisClient, request: Customer
         returnUrl: request.returnUrl,
         language: languageOf(request.language),
         shopName: request.shopName ?? null,
+        purpose: request.purpose ?? null,
     });
     await client.post<null>('/api/customer/login-link', payload, { headers });
 }
@@ -124,6 +132,7 @@ export async function requestLoginLink(client: AdibilisClient, request: Customer
  * it; the customer then asks for a new link.
  *
  * 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for a used, expired, replaced or unknown link (`customerRefusalOf`): offer a new one.
+ * 404 `CUSTOMER_SIGN_IN_DISABLED` once core's shop and resources modules are both off (core 1.9.32 and later).
  * 429 beyond 30 exchanges and logouts per visitor a minute.
  */
 export async function exchangeLoginToken(client: AdibilisClient, token: string, options: ShopCallOptions): Promise<CustomerSignIn> {

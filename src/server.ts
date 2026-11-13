@@ -107,6 +107,7 @@ export {
     requestLoginLink,
 } from './customer/session.js';
 export type { CustomerLoginLinkRequest, CustomerSessionCookie, CustomerSignIn } from './customer/session.js';
+export type { CustomerLoginPurpose } from './subscription/wire.js';
 export { customerLanguage } from './customer/language.js';
 export type { CustomerLanguageSources } from './customer/language.js';
 export { customerFromCookies } from './customer/customer-client.js';

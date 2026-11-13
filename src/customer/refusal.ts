@@ -29,6 +29,10 @@ export type CustomerRefusal =
     | { code: 'CUSTOMER_LOGIN_TOKEN_INVALID' }
     /** 404: core's shop module is off — the portal is closed. */
     | { code: 'SHOP_MODULE_DISABLED' }
+    /** 404: the resources module is off — the resources sign-in is closed. */
+    | { code: 'RESOURCES_MODULE_DISABLED' }
+    /** 404: the shop and the resources module are both off, so core has no sign-in at all (core 1.9.32 and later). */
+    | { code: 'CUSTOMER_SIGN_IN_DISABLED' }
     /** 404: no such subscription among the customer's (another customer's id answers the same). */
     | { code: 'SUBSCRIPTION_NOT_FOUND' }
     /** 404: no such delivery on this subscription. */
@@ -63,6 +67,8 @@ export type CustomerRefusal =
     | { code: 'PAYMENT_PROVIDER_ERROR' }
     /** 400: the login link's `returnUrl` is not on one of core's allowed shop origins — a setup error, not the customer's. */
     | { code: 'SHOP_ORIGIN_NOT_ALLOWED' }
+    /** 400: the resources sign-in's `returnUrl` is not on one of core's `RESOURCES_ALLOWED_ORIGINS` — a setup error, not the customer's. */
+    | { code: 'RESOURCES_ORIGIN_NOT_ALLOWED' }
     /** 400: the list's `sortBy` is not a field it can sort by. */
     | { code: 'SORT_FIELD_INVALID' }
     /** 400: the requested page lies outside the list. */
@@ -86,12 +92,15 @@ const LISTED: Record<number, readonly ListedCode[]> = {
         'SUBSCRIPTION_SETUP_INTENT_INVALID',
         'PAYMENT_PROVIDER_ERROR',
         'SHOP_ORIGIN_NOT_ALLOWED',
+        'RESOURCES_ORIGIN_NOT_ALLOWED',
         'SORT_FIELD_INVALID',
         'PAGE_OUT_OF_BOUNDS',
     ],
     401: ['CUSTOMER_SESSION_INVALID', 'CUSTOMER_LOGIN_TOKEN_INVALID'],
     404: [
         'SHOP_MODULE_DISABLED',
+        'RESOURCES_MODULE_DISABLED',
+        'CUSTOMER_SIGN_IN_DISABLED',
         'SUBSCRIPTION_NOT_FOUND',
         'SUBSCRIPTION_DELIVERY_NOT_FOUND',
         'INVOICE_NOT_FOUND',
