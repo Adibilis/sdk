@@ -21,17 +21,17 @@ export interface AdibilisClient {
     download(path: string, init?: RequestInit): Promise<Response>;
 }
 
+/** The path with the value of a `token` query parameter replaced, so a live cancellation token never lands in an error. */
+function redactedPath(path: string): string {
+    return path.replace(/([?&]token=)[^&#]*/g, '$1redacted');
+}
+
 /**
  * Server-side client for the Adibilis CORE API.
  *
  * It holds the WEBSITE key, so it must only ever be imported through `@adbls/sdk/server` —
  * from a route handler or a server component, never from a client component.
  */
-/** The path with the value of a `token` query parameter replaced, so a live cancellation token never lands in an error. */
-function redactedPath(path: string): string {
-    return path.replace(/([?&]token=)[^&#]*/g, '$1redacted');
-}
-
 export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClient {
     if (!config.apiKey) {
         throw new Error('createAdibilisClient: apiKey is required');
