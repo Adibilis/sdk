@@ -49,10 +49,10 @@ describe('order cancellation calls', () => {
 
     it.each([['an empty token', ''], ['a blank token', '   '], ['an over-long token', 'x'.repeat(201)]])(
         'rejects %s before any request',
-        (_name, token) => {
+        async (_name, token) => {
             const client = mockClient();
-            expect(() => getOrderCancellation(client, token, visitor)).toThrow(ZodError);
-            expect(() => cancelOrderByToken(client, token, visitor)).toThrow(ZodError);
+            await expect(getOrderCancellation(client, token, visitor)).rejects.toBeInstanceOf(ZodError);
+            await expect(cancelOrderByToken(client, token, visitor)).rejects.toBeInstanceOf(ZodError);
             expect(client.get).not.toHaveBeenCalled();
             expect(client.post).not.toHaveBeenCalled();
         }
@@ -74,6 +74,10 @@ describe('orderCancellationRefusalOf', () => {
     ])('%i %j gives %j', (status, errorList, expected) => {
         const error = new AdibilisApiError(status, { errorList }, '/api/payment/order/cancel');
         expect(orderCancellationRefusalOf(error)).toEqual(expected);
+    });
+
+    it('is null for an error without a JSON body', () => {
+        expect(orderCancellationRefusalOf(new AdibilisApiError(401, null, '/api/payment/order/cancel'))).toBeNull();
     });
 
     it('is null for a plain Error', () => {

@@ -22,12 +22,12 @@ export type OrderCancellationRefusal =
 /** Reads the order refusals core answers with on 409, or `null` for any other answer. */
 export function orderRefusalIn(status: number, errorList: Record<string, unknown>): OrderRefusal | null {
     if (status !== 409) return null;
-    if (Array.isArray(errorList['ORDER_ALREADY_CANCELLED'])) return { code: 'ORDER_ALREADY_CANCELLED' };
+    if ('ORDER_ALREADY_CANCELLED' in errorList) return { code: 'ORDER_ALREADY_CANCELLED' };
     const notCancellable = errorList['ORDER_NOT_CANCELLABLE'];
     if (Array.isArray(notCancellable)) {
         return { code: 'ORDER_NOT_CANCELLABLE', status: OrderStatusModel.options.find((known) => known === notCancellable[0]) ?? null };
     }
-    return Array.isArray(errorList['ORDER_NOT_REFUNDABLE']) ? { code: 'ORDER_NOT_REFUNDABLE' } : null;
+    return 'ORDER_NOT_REFUNDABLE' in errorList ? { code: 'ORDER_NOT_REFUNDABLE' } : null;
 }
 
 /** Core's refusal of an order cancellation call in a form a shop can act on, or `null` for any other error. */
