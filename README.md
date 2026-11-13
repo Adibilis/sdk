@@ -1033,6 +1033,140 @@ Google sets the rules for showing these reviews:
   uses for the page) and never write the reviews into a database, a file or a long-lived cache — core
   already holds the copy Google's terms allow.
 
+## Resources
+
+A resources site is a satellite that publishes core's library: articles, downloads and videos, filed
+under topics, some open to everyone and some only to the members of the contact groups that unlock them.
+Five server-side calls read it, and two browser-safe helpers turn the paths core writes into the
+URLs a browser loads. Needs core ≥ v1.9.32 with the `resources` module enabled.
+
+```typescript
+// server side — route handlers and server components only
+import {
+    listResources, getResource, listResourceTopics, listResourceProducts, resourceFile,
+    customerSessionFromCookies, resourceRefusalOf,
+} from '@adbls/sdk/server';
+// browser-safe
+import { resourceAssetUrl, rewriteResourceBody } from '@adbls/sdk';
+
+const visitor = {
+    clientIp: visitorIpOf(request),                                   // the visitor's IP literal, as for the checkout
+    customerSession: customerSessionFromCookies(await cookies()),     // null for an anonymous visitor
+};
+
+// The library page: every published card, locked ones included. The filters are all optional; blank ones are left out.
+const cards = await listResources(core, { search: 'tax', topicId: 3, format: 'PDF', language: 'de' }, visitor);
+const topics = await listResourceTopics(core, visitor);              // the topic filter, with a count each
+const products = await listResourceProducts(core, visitor);          // the product filter
+
+// A resource's page. A locked one is a 200, not an error: render the teaser and the sign-in.
+const resource = await getResource(core, id, visitor);
+if (!resource.card.unlocked) return renderTeaser(resource.card);
+```
+
+**The list is unpaged and open.** It answers every published resource as a card, ordered by topic and
+then by the resource's own order; narrow it with the filters (`search`, `topicId`, `format`, `language`,
+`productId`, `categoryId`, `groupSlug`) instead of paging it. A card the visitor's groups do not unlock
+has `unlocked === false`: show its teaser and the sign-in. The detail of a locked resource carries no
+`body` and no `files`. An unpublished resource is a 404, exactly like an unknown id.
+
+**Files.** A public file and every cover is served by core itself at
+`/api/public/media/resource/{id}/{file}`: no key, cached publicly for a day, and it may be framed, so an
+inline PDF viewer works. A member-only file goes through the satellite: a route handler streams it with
+`resourceFile`, so the key and the visitor's session never reach the browser.
+
+```typescript
+// app/api/resource/[id]/file/[mediaId]/route.ts
+import { AdibilisApiError, resourceFile, customerSessionFromCookies } from '@adbls/sdk/server';
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string; mediaId: string }> }) {
+    const { id, mediaId } = await params;
+    try {
+        const file = await resourceFile(core, Number(id), Number(mediaId), {
+            clientIp: visitorIpOf(request),
+            customerSession: customerSessionFromCookies(await cookies()),
+            range: request.headers.get('range'),      // a seekable video and a resumed download need it
+        });
+        return new Response(file.body, { status: file.status, headers: file.headers });  // 200 or 206
+    } catch (error) {
+        if (error instanceof AdibilisApiError) return new Response(null, { status: error.status });
+        throw error;
+    }
+}
+```
+
+`resourceFile` resolves with `status` (200, or 206 for a range), `body` (a stream, read once) and
+`headers`: only what core sent of `Content-Type`, `Content-Length`, `Content-Range`, `Accept-Ranges` and
+`Content-Disposition`, plus `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff` and
+`Content-Security-Policy: default-src 'none'`. Nothing else of core's answer (`Set-Cookie`,
+`X-Frame-Options`) reaches your origin. Any other answer rejects with an `AdibilisApiError`; a locked
+file is 403 `RESOURCE_LOCKED`, and a range past the end of the file is a 416 whose `body` is `null` (the
+file itself is never read). Never cache the answer, and never serve a public file through this route.
+
+**Covers, files and article images.** A resource carries core's paths, never URLs: `card.coverPath`,
+each file's `path`, and the `<img src>` of an article `body`. `resourceAssetUrl` turns a path into what a
+browser should load: a protected file path into your proxy route, a public media path into core's
+absolute URL. `rewriteResourceBody` does the same for every `<img src>` of a body and drops an image
+whose source is not one of core's two shapes. Any other path answers `null`. Both are browser-safe, so
+compose the URLs on the server and hand the result to the page as a prop: the core base URL is then
+never inlined into a bundle.
+
+```typescript
+const assets = { coreBaseUrl: process.env.ADIBILIS_BASE_URL!, proxyBase: '/api/resource' };
+const cover = resource.card.coverPath ? resourceAssetUrl(resource.card.coverPath, assets) : null; // string | null
+const downloads = resource.files.map((file) => ({ file, href: resourceAssetUrl(file.path, assets) }));
+const html = rewriteResourceBody(resource.body ?? '', assets);        // render as the article
+```
+
+**Signing in is the customer portal's recipe with a purpose.** Any contact can receive a resources link:
+no purchase is needed. Staff and unknown addresses get the same 202 and no mail. The `returnUrl`'s origin
+must be one of core's `RESOURCES_ALLOWED_ORIGINS`. Everything after the mail is the portal's flow
+unchanged, so read "Customer portal" above for the callback, the parked token and the same-origin
+rule: `exchangeLoginToken` sets the same `__Host-adbl_customer` cookie, `customerSessionFromCookies`
+reads it, and `customerFromCookies(core, await cookies(), visitor).logout()` signs out.
+
+```typescript
+await requestLoginLink(core, {
+    email,
+    returnUrl: 'https://resources.example/account/callback',   // core appends ?token=…
+    language: 'de-CH',
+    shopName: 'Example resources',
+    purpose: 'RESOURCES',
+}, { clientIp: visitorIpOf(request) });
+```
+
+`requestLoginLink` refuses a `RESOURCES` link with 400 `RESOURCES_ORIGIN_NOT_ALLOWED` (the origin is not
+in core's list: a setup error) and 404 `RESOURCES_MODULE_DISABLED`. Once the shop and resources modules
+are both off, `exchangeLoginToken` and `logout` answer 404 `CUSTOMER_SIGN_IN_DISABLED`; clear the cookie
+anyway. `customerRefusalOf` reads all three.
+
+**What core holds you to:**
+
+- **`clientIp` on every call**, with the checkout's rule: an IPv4 or IPv6 literal. Core throttles per
+  visitor with it; a missing or malformed one rejects locally before anything is sent.
+- **Budgets.** Per visitor a minute: 60 reads (list, detail, topics, products) and 300 files; per shop
+  server 1200 and 3000. A 429 means this visitor used it up: wait, do not loop.
+- **Every read is live.** The calls are sent with `cache: 'no-store'`: unpublishing a resource or
+  changing a group invalidates nothing on the satellite, so do not cache what they return.
+- **A session only when there is one.** An empty or `null` `customerSession` is an anonymous call; an
+  expired or unknown one is refused with 401 `CUSTOMER_SESSION_INVALID`: clear the cookie and sign in
+  again. A 401 without that code is a wrong WEBSITE key, which no sign-in fixes.
+- **`resourceRefusalOf(error)`** reads every refusal; `null` means rethrow.
+
+| Code | Status | Meaning |
+|---|---|---|
+| `CUSTOMER_SESSION_INVALID` | 401 | the session expired or was revoked: clear the cookie, sign in again |
+| `RESOURCES_MODULE_DISABLED` | 404 | the resources module is off: the site is closed |
+| `RESOURCE_NOT_FOUND` | 404 | unknown or unpublished resource (core does not tell which) |
+| `MEDIA_NOT_FOUND` | 404 | the resource has no such file |
+| `RESOURCE_LOCKED` | 403 | the file of a resource the visitor's groups do not unlock (file call only): show the sign-in |
+| `TOO_MANY_REQUESTS` | 429 | this visitor's budget is used up |
+
+**Core must be set up for the site:** the `resources` module enabled, the site's origin listed in
+`RESOURCES_ALLOWED_ORIGINS` (Settings → Resources → Website in core) and a WEBSITE API key in the
+satellite's environment. Ids and filters are checked locally first and reject with a `ZodError` before
+anything is sent.
+
 ## Health
 
 One call, for the satellite's own health endpoint:
@@ -1089,12 +1223,14 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.13.0 requires
-`@adbls/api-types` ^1.9.31 / core v1.9.31 or later** (a shop price's `discounts`, read by `openPriceDiscount`; an older core leaves
-the field absent, so `openPriceDiscount` returns `null`; in your own test fixtures the types now require
-`ShopProductPriceResponse.discounts`).
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.14.0 requires
+`@adbls/api-types` ^1.9.32 / core v1.9.32 or later** (the resources module and the sign-in `purpose`: an older core
+answers the resource endpoints with 404, does not know the `'RESOURCES'` purpose, and refuses the portal's sign-in
+calls with `SHOP_MODULE_DISABLED` instead of `CUSTOMER_SIGN_IN_DISABLED`).
 
-Earlier floors: `^1.9.30` was the first core release with discounts (codes, customer-group prices, open prices,
+Earlier floors: `^1.9.31` (0.13.0) was the first core release with a shop price's `discounts`, read by `openPriceDiscount`; an older core leaves
+the field absent, so `openPriceDiscount` returns `null`; in your own test fixtures the types now require
+`ShopProductPriceResponse.discounts`. `^1.9.30` was the first core release with discounts (codes, customer-group prices, open prices,
 delivery lines, the portal's `discount`; an older core ignores the new request fields, `discountCode` and `delivery`, so a code is never applied, and
 leaves the new response fields absent, `CheckoutPreview.discountTotal` included: absent, not `0`). In your own test fixtures the types now require
 `ShopProductResponse.openPrice`, `CheckoutPreview.discountTotal`, the subscription checkout amounts' `firstAmount`, `regularAmount`,
@@ -1159,9 +1295,9 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `POST /api/subscription/checkout` | opens a subscription in core and at Stripe (`startSubscriptionCheckout`), or with `preview: true` only prices it (`previewSubscriptionCheckout`); 429 beyond 10 per visitor (`X-Shop-Client-Ip`) or 300 per shop server a minute |
 | `GET /api/subscription/status` | the subscription behind a shop reference (`getSubscriptionStatus`); 429 beyond 60 per visitor or 1200 per shop server a minute |
 | `POST /api/shop/newsletter` | signs a visitor up for the newsletter (`subscribeNewsletter`); always 202 for an accepted sign-up (new, known or already subscribed address, honeypot hit); 400 = validation; 429 beyond 5 per visitor (`X-Shop-Client-Ip`) or 120 per shop server a minute; 503 `NEWSLETTER_NOT_STORED` (`Retry-After: 60`) = not stored, try again later |
-| `POST /api/customer/login-link` | mails a customer a one-time sign-in link, valid 15 minutes (`requestLoginLink`); always 202; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
-| `POST /api/customer/session` | exchanges the link's token for a 30-day session, once per link (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for a used, expired or unknown link; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
-| `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `SHOP_MODULE_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
+| `POST /api/customer/login-link` | mails a customer a one-time sign-in link, valid 15 minutes (`requestLoginLink`); always 202; with `purpose: 'RESOURCES'` any contact gets the resources link, 400 `RESOURCES_ORIGIN_NOT_ALLOWED` for a `returnUrl` outside `RESOURCES_ALLOWED_ORIGINS` and 404 `RESOURCES_MODULE_DISABLED`; 429 beyond 5 per visitor or 120 per shop server a minute; 5 mails per address an hour |
+| `POST /api/customer/session` | exchanges the link's token for a 30-day session, once per link (`exchangeLoginToken`); 401 `CUSTOMER_LOGIN_TOKEN_INVALID` for a used, expired or unknown link; 404 `CUSTOMER_SIGN_IN_DISABLED` once the shop and resources modules are both off; 429 beyond 30 per visitor or 600 per shop server a minute, shared with logout |
+| `DELETE /api/customer/session` | ends the session (`logout`); 200 even for a session that is gone; can also answer 404 `CUSTOMER_SIGN_IN_DISABLED` and 429 (shared with sign-ins) — clear the cookie anyway |
 | `GET /api/customer/subscription[/{id}]`, `GET /api/customer/transaction` | the signed-in customer's subscriptions and payments (`X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
 | `GET /api/customer/invoice/{id}/pdf` | the PDF of an invoice in the signed-in customer's transactions (`invoicePdf`); 404 `INVOICE_NOT_FOUND` for any other; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
@@ -1174,14 +1310,19 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `POST /api/property/lead/{token}/valuation-request` | stamps the request and mails the team; idempotent |
 | `POST /api/property/{id}/enquiry` | accepts a visitor's enquiry about a published property (`submitPropertyEnquiry`); 202 = accepted (honeypot hits and rate-limit drops too), 400 = validation (`body.violations`), 503 = not stored |
 | `GET /api/review/published` | the tenant's stored Google reviews (`fetchGoogleReviews`); no module gate; an empty list, not an error, while Google is not connected |
+| `GET /api/website/resource` | every published resource as a card, locked ones with `unlocked: false` (`listResources`); unpaged; 404 `RESOURCES_MODULE_DISABLED`; 401 `CUSTOMER_SESSION_INVALID` for a dead session (`X-Customer-Session`); 429 beyond 60 per visitor (`X-Shop-Client-Ip`) or 1200 per shop server a minute |
+| `GET /api/website/resource/{id}` | one resource with its body and files (`getResource`); a locked one answers 200 without body or files; 404 `RESOURCE_NOT_FOUND` for an unknown or unpublished one; same budget as the list |
+| `GET /api/website/resource/{id}/file/{mediaId}` | a file of a resource the session unlocks, `Range` supported (`resourceFile`); 403 `RESOURCE_LOCKED`, 404 `MEDIA_NOT_FOUND`, 416 for a range past the end; 429 beyond 300 per visitor or 3000 per shop server a minute |
+| `GET /api/website/resource-topic` | the topics holding a published resource, with their counts (`listResourceTopics`); 404 `RESOURCES_MODULE_DISABLED`; 60 per visitor a minute |
+| `GET /api/website/resource-product` | the products a published resource refers to (`listResourceProducts`); 404 `RESOURCES_MODULE_DISABLED`; 60 per visitor a minute |
 
 The six property endpoints answer **403** while the `properties` module row is disabled — unlike
 `/api/shop/holidays`, which 404s while `shop` is disabled. Not a typo in either place: holidays
 predates the module-row convention.
 
-`GET /api/public/media/property/{id}/{file}` and `GET /api/public/media/product/{id}/{file}` are
-**`permitAll`** — no key at all — because portal crawlers and shop visitors' browsers fetch these
-images by absolute URL.
+`GET /api/public/media/property/{id}/{file}`, `GET /api/public/media/product/{id}/{file}` and
+`GET /api/public/media/resource/{id}/{file}` are **`permitAll`** — no key at all — because portal crawlers and
+shop visitors' browsers fetch these images (and, for resources, the public files and covers) by absolute URL.
 
 (The inventory linked above predates the two payment endpoints; re-run it before a key ships.)
 
