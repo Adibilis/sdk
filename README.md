@@ -1043,8 +1043,8 @@ URLs a browser loads. Needs core ≥ v1.9.32 with the `resources` module enabled
 ```typescript
 // server side — route handlers and server components only
 import {
-    listResources, getResource, listResourceTopics, listResourceProducts, resourceFile,
-    customerSessionFromCookies, resourceRefusalOf,
+    listResources, getResource, listResourceTopics, listResourceProducts,
+    customerSessionFromCookies, resourceRefusalOf, expiredCustomerSessionCookie,
 } from '@adbls/sdk/server';
 // browser-safe
 import { resourceAssetUrl, rewriteResourceBody } from '@adbls/sdk';
@@ -1055,18 +1055,23 @@ const visitor = {
 };
 
 // The library page: every published card, locked ones included. The filters are all optional; blank ones are left out.
-const cards = await listResources(core, { search: 'tax', topicId: 3, format: 'PDF', language: 'de' }, visitor);
+const cards = await listResources(core, { search: 'tax', topicId: 3, format: 'PDF', language: 'DE' }, visitor);
 const topics = await listResourceTopics(core, visitor);              // the topic filter, with a count each
 const products = await listResourceProducts(core, visitor);          // the product filter
 
 // A resource's page. A locked one is a 200, not an error: render the teaser and the sign-in.
-const resource = await getResource(core, id, visitor);
+const resource = await getResource(core, id, visitor).catch((error) => {
+    if (resourceRefusalOf(error)?.code !== 'CUSTOMER_SESSION_INVALID') throw error;
+    return null;
+});
+if (!resource) return redirectToSignIn(expiredCustomerSessionCookie());  // a dead session: clear the cookie, sign in again
 if (!resource.card.unlocked) return renderTeaser(resource.card);
 ```
 
 **The list is unpaged and open.** It answers every published resource as a card, ordered by topic and
 then by the resource's own order; narrow it with the filters (`search`, `topicId`, `format`, `language`,
-`productId`, `categoryId`, `groupSlug`) instead of paging it. A card the visitor's groups do not unlock
+`productId`, `categoryId`, `groupSlug`) instead of paging it; `language` is `DE`, `FR`, `IT` or `EN`, not a
+locale. A card the visitor's groups do not unlock
 has `unlocked === false`: show its teaser and the sign-in. The detail of a locked resource carries no
 `body` and no `files`. An unpublished resource is a 404, exactly like an unknown id.
 
@@ -1123,7 +1128,7 @@ no purchase is needed. Staff and unknown addresses get the same 202 and no mail.
 must be one of core's `RESOURCES_ALLOWED_ORIGINS`. Everything after the mail is the portal's flow
 unchanged, so read "Customer portal" above for the callback, the parked token and the same-origin
 rule: `exchangeLoginToken` sets the same `__Host-adbl_customer` cookie, `customerSessionFromCookies`
-reads it, and `customerFromCookies(core, await cookies(), visitor).logout()` signs out.
+reads it, and `customerFromCookies(core, await cookies(), visitor)?.logout()` signs out.
 
 ```typescript
 await requestLoginLink(core, {
