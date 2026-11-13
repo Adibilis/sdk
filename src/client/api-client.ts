@@ -27,6 +27,11 @@ export interface AdibilisClient {
  * It holds the WEBSITE key, so it must only ever be imported through `@adbls/sdk/server` —
  * from a route handler or a server component, never from a client component.
  */
+/** The path with the value of a `token` query parameter replaced, so a live cancellation token never lands in an error. */
+function redactedPath(path: string): string {
+    return path.replace(/([?&]token=)[^&#]*/g, '$1redacted');
+}
+
 export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClient {
     if (!config.apiKey) {
         throw new Error('createAdibilisClient: apiKey is required');
@@ -47,7 +52,7 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
 
         if (!response.ok) {
             // Only status, body and path — see AdibilisApiError on why the key never travels along.
-            throw new AdibilisApiError(response.status, await parseBody(response), path);
+            throw new AdibilisApiError(response.status, await parseBody(response), redactedPath(path));
         }
         return response;
     }
