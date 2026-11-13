@@ -16,6 +16,8 @@ export { checkoutStatusOutcome } from './checkout/checkout-status.js';
 export type { CheckoutOutcome } from './checkout/checkout-status.js';
 export { isHoliday } from './shop/holidays-client.js';
 export type { HolidayRange } from './shop/holidays-client.js';
+export { isBookingCancelled } from './shop/booking-rules.js';
+export type { CancelledBooking } from './shop/booking-rules.js';
 export type { PickupSite } from './shop/pickup-site-client.js';
 export { priceIn, shopImageUrl, vatNoteOf } from './shop/product-image.js';
 export type { VatNote } from './shop/product-image.js';
@@ -48,12 +50,15 @@ export type { DynamicPrice } from './subscription/pricing.js';
 export { describeBilling, describeSchedule } from './subscription/describe.js';
 
 export type {
+    CancellationCause,
     CustomerAddress,
     CustomerDelivery,
     CustomerPage,
     CustomerPaymentMethod,
     CustomerPaymentMethodSetup,
     CustomerPaymentMethodUpdate,
+    CustomerOrder,
+    CustomerOrderLine,
     CustomerPaymentRetry,
     CustomerPlan,
     CustomerProfile,
@@ -63,9 +68,12 @@ export type {
     CustomerTransaction,
     CustomerTransactionKind,
     FulfillmentType,
+    OrderRefund,
+    RefundStatus,
     SubscriptionDeliverySkipReason,
     SubscriptionDeliveryStatus,
 } from './customer/types.js';
 export { configurationObjectOf, PAUSE_HORIZON_DAYS, plansForChange, resumeDateRange, scheduleChangeOf } from './customer/rules.js';
 export type { ScheduleChangeCheck } from './customer/rules.js';
+export type { OrderCancellationRefusal, OrderRefusal } from './order/refusal.js';
 export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';
