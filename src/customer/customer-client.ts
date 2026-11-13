@@ -207,7 +207,7 @@ function deliveryPersonChange(id: number, deliveryPerson: CustomerDeliveryPerson
  * `X-Customer-Session`, never a URL) and the visitor's address; core resolves the customer from the session and answers 404 for
  * any id that is not theirs. The session token lives in a private field: it is not enumerable, not serialised, not logged.
  *
- * Every call: 401 `CUSTOMER_SESSION_INVALID` (expired, revoked, or no longer a customer — sign in again), 404
+ * Every portal call: 401 `CUSTOMER_SESSION_INVALID` (expired, revoked, or no longer a customer — sign in again), 404
  * `SHOP_MODULE_DISABLED`, 429 `TOO_MANY_REQUESTS` (reads 60, changes 10, invoice PDFs 10, card calls 5 per visitor a minute).
  */
 export class CustomerClient {

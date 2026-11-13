@@ -42,7 +42,7 @@ export interface CustomerLoginLinkRequest {
     email: string;
     /**
      * Your callback page, absolute (`https://shop.example/account/callback`). Its origin must be one of core's
-     * `SHOP_ALLOWED_ORIGINS`; core appends `token` to it.
+     * `SHOP_ALLOWED_ORIGINS` (`RESOURCES_ALLOWED_ORIGINS` with the `'RESOURCES'` purpose); core appends `token` to it.
      */
     returnUrl: string;
     /** The visitor's locale (`de`, `de-CH`, `fr`): the mail is written in German, French, Italian or English, else in the customer's own language. */
