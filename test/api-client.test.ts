@@ -50,6 +50,22 @@ describe('createAdibilisClient', () => {
         });
     });
 
+    it('redacts a token query parameter in the error path and message, and leaves other queries alone', async () => {
+        const fetchMock = vi.fn().mockImplementation(async () => new Response('denied', { status: 401 }));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        const withToken = await client.get('/api/payment/order/cancellation?token=abc.def').catch((e: AdibilisApiError) => e);
+        const withPage = await client.get('/api/customer/order?page=1').catch((e: AdibilisApiError) => e);
+
+        expect(withToken.path).toBe('/api/payment/order/cancellation?token=redacted');
+        expect(withToken.path).not.toContain('abc.def');
+        expect(withToken.message).not.toContain('abc.def');
+        expect(withToken.message).toContain('token=redacted');
+        expect(withPage.path).toBe('/api/customer/order?page=1');
+        // the request itself still carries the real token
+        expect(fetchMock.mock.calls[0][0]).toBe('https://core.test/api/payment/order/cancellation?token=abc.def');
+    });
+
     it('never puts the api key in the error message', async () => {
         const fetchMock = vi.fn().mockResolvedValue(new Response('denied', { status: 401 }));
         const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'super-secret', fetch: fetchMock });

@@ -146,6 +146,12 @@ mails the buyer. The shop keeps only `@stripe/stripe-js` / `@stripe/react-stripe
 `returnUrl` must sit on the shop URL (or an allowed extra origin) configured in core's payment
 settings.
 
+**`cancellationUrl` is optional.** Pass an absolute URL on an allowed shop origin
+(`cancellationUrl: 'https://kaemo.ch/stornieren'`) and core mails the buyer `<cancellationUrl>?token=…`
+so they can cancel the order from your page (see "Order cancellation"). A URL on an origin core does
+not allow answers 400 `SHOP_ORIGIN_NOT_ALLOWED`, exactly like a bad `returnUrl`: a setup error, not a
+`checkoutRefusalOf` code.
+
 ### Discounts: a code field, delivery lines, open prices
 
 Core owns every discount; the shop shows what core answers and never recomputes a total. The order
@@ -169,6 +175,8 @@ try {
     // CHECKOUT_AMOUNT_CHANGED → preview again, show refusal.amount (also when the session lapsed between preview and start);
     // CHECKOUT_EXPIRED, CHECKOUT_PAYMENT_IN_PROGRESS, SHOP_PRODUCT_NOT_AVAILABLE → as above;
     // DISCOUNT_CODE_REFUSED → refusal.reason, the code field's error (nothing was created);
+    // BOOKING_DATE_CANCELLED → the studio cancelled that class date: drop the line, refusal.productId / refusal.startAt name it
+    //   (both `null` when core's answer carried none); re-read the cancelled dates (see Shop catalog);
     // SHOP_PRODUCT_NOT_FOUND → a catalog line's product is not listed any more; SHOP_PRODUCT_NOT_PRICED → refusal.productId has no price in refusal.currency;
     // SHOP_PRODUCT_PRICE_OUT_OF_RANGE → refusal.productId: the chosen open price is off the product's range or step;
     // ORDER_DELIVERY_LINE_WITH_PRODUCT → a delivery line also named a product (a bug in the cart builder)
@@ -694,6 +702,84 @@ Every call checks its input locally first — the generated schema, positive ids
 schedule, a JSON-object configuration, ISO dates, the SetupIntent's `seti_…` id (never its client
 secret), the visitor's address — and rejects with a `ZodError` before anything is sent.
 
+## Order cancellation
+
+A buyer cancels a one-time order in two ways: by the link in the confirmation mail, or signed in to
+the customer portal. Core refunds the payment in full either way. Needs core v1.9.32 or later.
+
+**The link flow.** Pass `cancellationUrl` in `startCheckout` (an absolute URL on an allowed shop
+origin, e.g. `https://kaemo.ch/stornieren`). Core mails the buyer `<cancellationUrl>?token=…`. The
+page calls `getOrderCancellation(core, token, { clientIp })`, shows the booking, and on confirm calls
+`cancelOrderByToken(core, token, { clientIp })`. Both are server-only and return a `CustomerOrder`.
+
+The link stays valid after use: the token is a stateless signature over the order id, it never expires
+and is the same in every mail for that order. A re-opened link answers 200 with
+`orderStatus: 'CANCELLED'` and the refund, and `cancelOrderByToken` then answers 409
+`ORDER_ALREADY_CANCELLED`. So the page checks `orderStatus === 'CANCELLED'` first and shows the
+cancelled order with its refund; only an uncancelled order shows the booking and the cancel button.
+
+```typescript
+import { getOrderCancellation, cancelOrderByToken, orderCancellationRefusalOf } from '@adbls/sdk/server';
+
+const visitor = { clientIp: visitorIpOf(request) };
+try {
+    const order = await getOrderCancellation(core, token, visitor);   // GET: changes nothing, safe to load on page view
+    if (order.orderStatus === 'CANCELLED') {
+        // a re-opened link: show the cancelled order and order.refund.status, no button
+    } else {
+        // show order.lines, and the button only while the shop's own deadline has not passed
+        const cancelled = await cancelOrderByToken(core, token, visitor); // on the buyer's confirm, never on page load
+        // cancelled.refund.status says what to tell the buyer, see below
+    }
+} catch (error) {
+    const refusal = orderCancellationRefusalOf(error); // null for anything else: rethrow
+}
+```
+
+A blank or over-long token (core takes at most 200 characters) throws a `ZodError` and sends nothing.
+
+**The deadline is the shop's.** Core never refuses a cancellation because it is too late: it does not
+know your classes' rules. The shop computes the deadline from the lines' `externalRef` (the reference
+your cart put on each line) and shows the cancel button only before it. Core still refuses an order
+that is past cancelling for its own reasons (`ORDER_NOT_CANCELLABLE`).
+
+**What to show for `refund.status`.** Every cancelled order carries `refund`: `{ status, amount, currency, refundedAt }`.
+
+| `refund.status` | what to tell the buyer |
+|---|---|
+| `NONE` | cancelled; nothing was charged, so nothing is refunded |
+| `PENDING` | cancelled; the refund is under way, usually a few days until it reaches the card |
+| `SUCCEEDED` | cancelled and refunded on `refundedAt` |
+| `FAILED` | cancelled; the studio settles the refund with the buyer. This is a 200 answer, not an error: do not show a failure page |
+
+`NONE` is also what a live, uncancelled order answers, so this table applies once the order is
+cancelled (`orderStatus === 'CANCELLED'`).
+
+`cancellationCause` says who cancelled (`CancellationCause`), `cancelledAt` when.
+
+**Refusals.** `orderCancellationRefusalOf(error)` reads them; `null` means rethrow.
+
+| `code` | status | what to do |
+|---|---|---|
+| `ORDER_CANCELLATION_TOKEN_INVALID` | 401 | the token is malformed or forged, the studio rotated the link secret, or the order no longer exists (a used link is not a 401, see above): say the link is not valid; the buyer can ask the studio |
+| `ORDER_ALREADY_CANCELLED` | 409 | show the order as cancelled (read it again for the refund) |
+| `ORDER_NOT_CANCELLABLE` | 409 | past the point where a customer can cancel; `status` is the order's status, `null` for one this SDK does not know. Show "please contact the studio" |
+| `ORDER_NOT_REFUNDABLE` | 409 | paid in a way core cannot refund; nothing changed. Ask the studio |
+| `SHOP_MODULE_DISABLED` | 404 | core's shop module is off; the page is closed |
+| `TOO_MANY_REQUESTS` | 429 | this visitor used up 5 cancels or 60 reads a minute; wait, do not loop |
+
+**Signed in.** On the account pages, `customerFromCookies(...)` gives a client with `listOrders({ page, pageSize })`,
+`getOrder(id)` and `cancelOrder(id)`. They answer `CustomerOrder`s (a page of them for the list);
+`customerRefusalOf` reads the order codes next to the portal's own: 404 `ORDER_NOT_FOUND` (another
+customer's order answers the same), and on 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`
+(with `status`) and `ORDER_NOT_REFUNDABLE`. The shop's deadline applies here too: hide the button after
+it. `CustomerTransaction.orderId` links a payment row to its order; `refundStatus` and `refundedAt`
+mark a refunded payment.
+
+**Stripe events.** Core learns a refund's outcome from Stripe. Register `charge.refunded` and
+`charge.refund.updated` on core's webhook endpoint, or a `PENDING` refund never turns `SUCCEEDED`
+or `FAILED`.
+
 ## Shop catalog
 
 A satellite shop sells what core lists for it. An admin enables satellites once (Settings →
@@ -783,6 +869,14 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   older than `v1.9.7` sends no field, so read `available !== false`.
 - **`taxAmount` is always the order's VAT total** — Stripe's figure on an account with automatic
   tax, core's own otherwise. It used to be `0` unless automatic tax was on.
+- **Cancelled class dates.** `fetchCancelledBookings(core, { clientIp })` (server-only) lists the
+  class dates the studio cancelled: `{ productId, startAt }`, `startAt` an instant. Hide those dates
+  from the booking picker, and `checkoutRefusalOf` still answers 409 `BOOKING_DATE_CANCELLED` for one
+  that slips through. Compare with `isBookingCancelled(productId, startAt, cancelled)` (browser-safe),
+  never as strings: the same instant can be written two ways. Like any shop read it can answer 404
+  `SHOP_MODULE_DISABLED` and 429; there is no refusal reader for it. Core answers
+  `Cache-Control: private, max-age=60`: cache the list 60 seconds and merge it with the shop's own
+  list of cancelled dates.
 
 ## Newsletter
 
@@ -1089,12 +1183,13 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.13.0 requires
-`@adbls/api-types` ^1.9.31 / core v1.9.31 or later** (a shop price's `discounts`, read by `openPriceDiscount`; an older core leaves
-the field absent, so `openPriceDiscount` returns `null`; in your own test fixtures the types now require
-`ShopProductPriceResponse.discounts`).
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.14.0 requires
+`@adbls/api-types` ^1.9.32 / core v1.9.32 or later** (order cancellation, refunds and cancelled class dates; an older core answers
+the new endpoints with 404 and does not mail `cancellationUrl`).
 
-Earlier floors: `^1.9.30` was the first core release with discounts (codes, customer-group prices, open prices,
+Earlier floors: `^1.9.31` (0.13.0) was the first with a shop price's `discounts`, read by `openPriceDiscount`; an older core leaves
+the field absent, so `openPriceDiscount` returns `null`; in your own test fixtures the types now require
+`ShopProductPriceResponse.discounts`. `^1.9.30` was the first core release with discounts (codes, customer-group prices, open prices,
 delivery lines, the portal's `discount`; an older core ignores the new request fields, `discountCode` and `delivery`, so a code is never applied, and
 leaves the new response fields absent, `CheckoutPreview.discountTotal` included: absent, not `0`). In your own test fixtures the types now require
 `ShopProductResponse.openPrice`, `CheckoutPreview.discountTotal`, the subscription checkout amounts' `firstAmount`, `regularAmount`,
@@ -1117,10 +1212,7 @@ not a pin, so a new core release reaches SDK users without an SDK release; the S
 release when it wants something new from core.
 
 The subscription and customer-portal functions need a core release with the subscription checkout,
-the customer session and the portal; an older core answers their endpoints with 404. Until
-`@adbls/api-types` carries those types, `src/subscription/wire.ts` holds a verbatim copy of core's
-generated ones; the release that raises the dependency replaces it with re-exports, and nothing that
-imports from the SDK changes.
+the customer session and the portal; an older core answers their endpoints with 404.
 
 `subscribeNewsletter` needs a core release that serves `POST /api/shop/newsletter`; an older core
 refuses it (typically with a 404).
@@ -1166,6 +1258,12 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/customer/invoice/{id}/pdf` | the PDF of an invoice in the signed-in customer's transactions (`invoicePdf`); 404 `INVOICE_NOT_FOUND` for any other; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `POST\|PATCH /api/customer/subscription/{id}/payment-method` | the card change (`beginPaymentMethodUpdate`, `confirmPaymentMethod`); 429 beyond 5 per visitor or 120 per shop server a minute, and beyond 10 SetupIntents per customer an hour |
+| `GET /api/payment/order/cancellation?token=` | the order behind a cancellation mail's token (`getOrderCancellation`); 401 `ORDER_CANCELLATION_TOKEN_INVALID` for a malformed or forged token, a rotated link secret or an order that no longer exists (never for a used or old link); can also answer 404 `SHOP_MODULE_DISABLED`; 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `POST /api/payment/order/cancel` | cancels that order and refunds it (`cancelOrderByToken`); 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`, `ORDER_NOT_REFUNDABLE`; 401 `ORDER_CANCELLATION_TOKEN_INVALID`; 404 `SHOP_MODULE_DISABLED`; 429 beyond 5 per visitor or 120 per shop server a minute |
+| `GET /api/customer/order` | one page of the signed-in customer's one-time orders (`listOrders`, `X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `GET /api/customer/order/{id}` | one order of the signed-in customer's (`getOrder`); 404 `ORDER_NOT_FOUND` for another customer's |
+| `POST /api/customer/order/{id}/cancel` | the customer cancels and refunds an order (`cancelOrder`); the same 409 refusals as by link |
+| `GET /api/shop/booking/cancelled` | the class dates the studio cancelled (`fetchCancelledBookings`); 404 while the `shop` module is disabled; `Cache-Control: private, max-age=60` |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |
 | `GET /api/property/published` | one page of the properties with a live `OWN_WEBSITE` listing |
 | `GET /api/property/published/{id}` | 404 unless that property is published |
@@ -1224,4 +1322,5 @@ used to redeclare date-bearing shapes; it imports the generated ones now. Compar
 strings (they order lexicographically) or parse them yourself. In the customer portal's responses
 `nextBillingAt`, `nextDeliveryAt`, `pausedUntil`, `startDate` and a delivery's `dueDate` are
 date-only (`YYYY-MM-DD`, core's time zone): never `new Date('2026-11-03')`, which is UTC midnight
-and shows the previous day west of Greenwich. The other timestamps are instants.
+and shows the previous day west of Greenwich. The other timestamps are instants. So are `startAt`
+(a cancelled class date), and an order's `orderedAt`, `cancelledAt` and `refundedAt`.

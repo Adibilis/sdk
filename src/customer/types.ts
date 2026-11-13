@@ -1,4 +1,14 @@
 import type {
+    CancellationCause,
+    CustomerOrderLineResponse,
+    CustomerOrderResponse,
+    CustomerRefundResponse,
+    CustomerTransactionResponse,
+    OrderStatus,
+    PaymentStatus,
+    RefundStatus,
+} from '@adbls/api-types';
+import type {
     BillingInterval,
     CustomerAddressResponse,
     CustomerDeliveryResponse,
@@ -12,7 +22,6 @@ import type {
     CustomerSubscriptionDiscount,
     CustomerSubscriptionResponse,
     CustomerTransactionKind,
-    CustomerTransactionResponse,
     FulfillmentType,
     ScheduleDefinition,
     SchedulePattern,
@@ -179,7 +188,7 @@ export interface CustomerPaymentMethodUpdate {
     hostedInvoiceUrl: string | null;
 }
 
-/** One charge: a paid subscription period (`reference` = subscription number) or a paid one-time order (order number). */
+/** One charge: a paid subscription period (`reference` = subscription number) or a paid one-time order (order number). `date` is when it was paid. */
 export interface CustomerTransaction {
     kind: CustomerTransactionKind;
     /** An instant (ISO-8601 timestamp). */
@@ -199,6 +208,12 @@ export interface CustomerTransaction {
     invoiceId: number | null;
     /** The invoice's number, as printed on it and in the PDF's file name; `null` exactly when `invoiceId` is. */
     invoiceNumber: string | null;
+    /** The order behind an `ORDER` row, to open it with `getOrder`; `null` for a subscription period. */
+    orderId: number | null;
+    /** How the refund of a cancelled order stands; `null` when nothing was refunded. */
+    refundStatus: RefundStatus | null;
+    /** An instant (ISO-8601 timestamp); `null` until the refund went through. */
+    refundedAt: string | null;
 }
 
 /**
@@ -218,8 +233,44 @@ export interface CustomerInvoicePdf {
     headers: Record<string, string>;
 }
 
-type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
-type Holds<T extends true> = T;
+export type { CancellationCause, OrderStatus, PaymentStatus, RefundStatus } from '@adbls/api-types';
+
+/** One line of an order, as the order page shows it. */
+export interface CustomerOrderLine {
+    productId: number | null;
+    productTitle: string | null;
+    quantity: number;
+    externalRef: string | null;
+    textHtml: string | null;
+}
+
+/** What became of the money after a cancel. `FAILED` means core could not refund; the studio settles it by hand. */
+export interface OrderRefund {
+    status: RefundStatus;
+    amount: number | null;
+    currency: string | null;
+    refundedAt: string | null;
+}
+
+/** An order as core shows it behind the cancellation link and in the portal. Dates are instants (ISO-8601 timestamps). */
+export interface CustomerOrder {
+    orderId: number;
+    orderNumber: string;
+    orderStatus: OrderStatus;
+    orderedAt: string;
+    cancelledAt: string | null;
+    cancellationCause: CancellationCause | null;
+    grandTotal: number;
+    currency: string;
+    lines: CustomerOrderLine[];
+    paymentStatus: PaymentStatus | null;
+    refund: OrderRefund;
+    invoiceId: number | null;
+    invoiceNumber: string | null;
+}
+
+export type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
+export type Holds<T extends true> = T;
 
 // Each SDK type names exactly core's fields: a field core adds, drops or renames fails this build, not a shop at run time.
 type MatchesCore = [
@@ -233,4 +284,7 @@ type MatchesCore = [
     Holds<SameKeys<CustomerPaymentMethodSetup, CustomerPaymentMethodSetupResponse>>,
     Holds<SameKeys<CustomerPaymentMethodUpdate, CustomerPaymentMethodUpdateResponse>>,
     Holds<SameKeys<CustomerTransaction, CustomerTransactionResponse>>,
+    Holds<SameKeys<CustomerOrder, CustomerOrderResponse>>,
+    Holds<SameKeys<CustomerOrderLine, CustomerOrderLineResponse>>,
+    Holds<SameKeys<OrderRefund, CustomerRefundResponse>>,
 ];

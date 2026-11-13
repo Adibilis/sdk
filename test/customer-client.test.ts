@@ -102,6 +102,33 @@ describe('reads', () => {
         expect(client.get.mock.calls[1][0]).toBe('/api/customer/transaction?page=1&subscriptionId=9');
     });
 
+    it('lists the customer\u2019s orders, reads one and cancels one', async () => {
+        const { client, customer } = signedIn();
+        client.get.mockResolvedValue(page);
+        client.post.mockResolvedValue({});
+
+        await customer.listOrders({ page: 1, pageSize: 10 });
+        await customer.getOrder(42);
+        await customer.cancelOrder(42);
+
+        expect(client.get.mock.calls[0]).toEqual(['/api/customer/order?page=1&pageSize=10', callHeaders]);
+        expect(client.get.mock.calls[1]).toEqual(['/api/customer/order/42', callHeaders]);
+        expect(client.post).toHaveBeenCalledWith('/api/customer/order/42/cancel', undefined, callHeaders);
+    });
+
+    it.each([
+        ['a page size of 0', (c: ReturnType<typeof signedIn>['customer']) => c.listOrders({ pageSize: 0 })],
+        ['an order id of 0', (c: ReturnType<typeof signedIn>['customer']) => c.getOrder(0)],
+        ['a fractional order id', (c: ReturnType<typeof signedIn>['customer']) => c.getOrder(1.5)],
+        ['a cancel with an id of 0', (c: ReturnType<typeof signedIn>['customer']) => c.cancelOrder(0)],
+    ])('refuses %s before any request', async (_name, call) => {
+        const { client, customer } = signedIn();
+
+        await expect(call(customer)).rejects.toBeInstanceOf(ZodError);
+        expect(client.get).not.toHaveBeenCalled();
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
     it.each([
         ['a subscription id that is not a positive integer', (c: ReturnType<typeof signedIn>['customer']) => c.getSubscription(0)],
         ['a fractional id', (c: ReturnType<typeof signedIn>['customer']) => c.getSubscription(1.5)],
