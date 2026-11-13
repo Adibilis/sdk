@@ -1245,9 +1245,10 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/customer/invoice/{id}/pdf` | the PDF of an invoice in the signed-in customer's transactions (`invoicePdf`); 404 `INVOICE_NOT_FOUND` for any other; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `POST\|PATCH /api/customer/subscription/{id}/payment-method` | the card change (`beginPaymentMethodUpdate`, `confirmPaymentMethod`); 429 beyond 5 per visitor or 120 per shop server a minute, and beyond 10 SetupIntents per customer an hour |
-| `GET /api/payment/order/cancellation?token=` | the order behind a cancellation mail's token (`getOrderCancellation`); 401 `ORDER_CANCELLATION_TOKEN_INVALID` for a used, expired or unknown link |
-| `POST /api/payment/order/cancel` | cancels that order and refunds it (`cancelOrderByToken`); 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`, `ORDER_NOT_REFUNDABLE`; 429 beyond 5 per visitor a minute |
-| `GET /api/customer/order`, `GET /api/customer/order/{id}` | the signed-in customer's one-time orders (`listOrders`, `getOrder`, `X-Customer-Session`); 404 `ORDER_NOT_FOUND` for another customer's |
+| `GET /api/payment/order/cancellation?token=` | the order behind a cancellation mail's token (`getOrderCancellation`); 401 `ORDER_CANCELLATION_TOKEN_INVALID` for a used, expired or unknown link; can also answer 404 `SHOP_MODULE_DISABLED` and 429 |
+| `POST /api/payment/order/cancel` | cancels that order and refunds it (`cancelOrderByToken`); 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`, `ORDER_NOT_REFUNDABLE`; 401 `ORDER_CANCELLATION_TOKEN_INVALID`; 404 `SHOP_MODULE_DISABLED`; 429 beyond 5 per visitor a minute |
+| `GET /api/customer/order` | one page of the signed-in customer's one-time orders (`listOrders`, `X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
+| `GET /api/customer/order/{id}` | one order of the signed-in customer's (`getOrder`); 404 `ORDER_NOT_FOUND` for another customer's |
 | `POST /api/customer/order/{id}/cancel` | the customer cancels and refunds an order (`cancelOrder`); the same 409 refusals as by link |
 | `GET /api/shop/booking/cancelled` | the class dates the studio cancelled (`fetchCancelledBookings`); 404 while the `shop` module is disabled; `Cache-Control: private, max-age=60` |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |
