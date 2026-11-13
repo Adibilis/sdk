@@ -53,8 +53,9 @@ function queryOf(filters: WebsiteResourceFilterRequest): string {
 }
 
 /**
- * Every published resource as a card, locked or not, ordered by core. Unpaged and open: the list answers the visitor's own view of
- * the whole library, so a satellite filters it here rather than paging it. A card the visitor's groups do not unlock has
+ * Every published resource as a card, locked or not, ordered by topic (its sort order, then name), then by the resource's sort order
+ * and title. Unpaged and open: the list answers the visitor's own view of the whole library, so a satellite narrows it with the
+ * filters rather than paging it. A card the visitor's groups do not unlock has
  * `unlocked === false`: show its teaser and the sign-in. Blank filters are left out; a filter core would refuse rejects with a
  * `ZodError` before any call.
  *
