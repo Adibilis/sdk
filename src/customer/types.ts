@@ -1,4 +1,13 @@
 import type {
+    CancellationCause,
+    CustomerOrderLineResponse,
+    CustomerOrderResponse,
+    CustomerRefundResponse,
+    OrderStatus,
+    PaymentStatus,
+    RefundStatus,
+} from '@adbls/api-types';
+import type {
     BillingInterval,
     CustomerAddressResponse,
     CustomerDeliveryResponse,
@@ -218,8 +227,44 @@ export interface CustomerInvoicePdf {
     headers: Record<string, string>;
 }
 
-type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
-type Holds<T extends true> = T;
+export type { CancellationCause, OrderStatus, PaymentStatus, RefundStatus } from '@adbls/api-types';
+
+/** One line of an order, as the order page shows it. */
+export interface CustomerOrderLine {
+    productId: number | null;
+    productTitle: string | null;
+    quantity: number;
+    externalRef: string | null;
+    textHtml: string | null;
+}
+
+/** What became of the money after a cancel. `FAILED` means core could not refund; the studio settles it by hand. */
+export interface OrderRefund {
+    status: RefundStatus;
+    amount: number | null;
+    currency: string | null;
+    refundedAt: string | null;
+}
+
+/** An order as core shows it behind the cancellation link. Dates are instants (ISO-8601 timestamps). */
+export interface CustomerOrder {
+    orderId: number;
+    orderNumber: string;
+    orderStatus: OrderStatus;
+    orderedAt: string;
+    cancelledAt: string | null;
+    cancellationCause: CancellationCause | null;
+    grandTotal: number;
+    currency: string;
+    lines: CustomerOrderLine[];
+    paymentStatus: PaymentStatus | null;
+    refund: OrderRefund;
+    invoiceId: number | null;
+    invoiceNumber: string | null;
+}
+
+export type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
+export type Holds<T extends true> = T;
 
 // Each SDK type names exactly core's fields: a field core adds, drops or renames fails this build, not a shop at run time.
 type MatchesCore = [
@@ -233,4 +278,7 @@ type MatchesCore = [
     Holds<SameKeys<CustomerPaymentMethodSetup, CustomerPaymentMethodSetupResponse>>,
     Holds<SameKeys<CustomerPaymentMethodUpdate, CustomerPaymentMethodUpdateResponse>>,
     Holds<SameKeys<CustomerTransaction, CustomerTransactionResponse>>,
+    Holds<SameKeys<CustomerOrder, CustomerOrderResponse>>,
+    Holds<SameKeys<CustomerOrderLine, CustomerOrderLineResponse>>,
+    Holds<SameKeys<OrderRefund, CustomerRefundResponse>>,
 ];
