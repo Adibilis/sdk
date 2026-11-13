@@ -3,6 +3,7 @@ import type {
     CustomerOrderLineResponse,
     CustomerOrderResponse,
     CustomerRefundResponse,
+    CustomerTransactionResponse,
     OrderStatus,
     PaymentStatus,
     RefundStatus,
@@ -21,7 +22,6 @@ import type {
     CustomerSubscriptionDiscount,
     CustomerSubscriptionResponse,
     CustomerTransactionKind,
-    CustomerTransactionResponse,
     FulfillmentType,
     ScheduleDefinition,
     SchedulePattern,
@@ -188,7 +188,7 @@ export interface CustomerPaymentMethodUpdate {
     hostedInvoiceUrl: string | null;
 }
 
-/** One charge: a paid subscription period (`reference` = subscription number) or a paid one-time order (order number). */
+/** One charge: a paid subscription period (`reference` = subscription number) or a paid one-time order (order number). `date` is when it was paid. */
 export interface CustomerTransaction {
     kind: CustomerTransactionKind;
     /** An instant (ISO-8601 timestamp). */
@@ -208,6 +208,12 @@ export interface CustomerTransaction {
     invoiceId: number | null;
     /** The invoice's number, as printed on it and in the PDF's file name; `null` exactly when `invoiceId` is. */
     invoiceNumber: string | null;
+    /** The order behind an `ORDER` row, to open it with `getOrder`; `null` for a subscription period. */
+    orderId: number | null;
+    /** How the refund of a cancelled order stands; `null` when nothing was refunded. */
+    refundStatus: RefundStatus | null;
+    /** An instant (ISO-8601 timestamp); `null` until the refund went through. */
+    refundedAt: string | null;
 }
 
 /**

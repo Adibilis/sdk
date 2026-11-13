@@ -1117,10 +1117,7 @@ not a pin, so a new core release reaches SDK users without an SDK release; the S
 release when it wants something new from core.
 
 The subscription and customer-portal functions need a core release with the subscription checkout,
-the customer session and the portal; an older core answers their endpoints with 404. Until
-`@adbls/api-types` carries those types, `src/subscription/wire.ts` holds a verbatim copy of core's
-generated ones; the release that raises the dependency replaces it with re-exports, and nothing that
-imports from the SDK changes.
+the customer session and the portal; an older core answers their endpoints with 404.
 
 `subscribeNewsletter` needs a core release that serves `POST /api/shop/newsletter`; an older core
 refuses it (typically with a 404).

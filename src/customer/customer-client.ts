@@ -20,6 +20,7 @@ import type { CookieReader } from './session.js';
 import { AdibilisApiError } from '../client/errors.js';
 import type {
     CustomerInvoicePdf,
+    CustomerOrder,
     CustomerPage,
     CustomerPaymentMethodSetup,
     CustomerPaymentMethodUpdate,
@@ -29,6 +30,7 @@ import type {
 } from './types.js';
 
 const SUBSCRIPTION_PATH = '/api/customer/subscription';
+const ORDER_PATH = '/api/customer/order';
 const MAX_PAGE_SIZE = 200;
 const PDF = 'application/pdf';
 
@@ -117,6 +119,10 @@ const TransactionQueryModel = PageModel.extend({ subscriptionId: IdModel.optiona
 
 function subscriptionPath(id: number): string {
     return `${SUBSCRIPTION_PATH}/${IdModel.parse(id)}`;
+}
+
+function orderPath(id: number): string {
+    return `${ORDER_PATH}/${IdModel.parse(id)}`;
 }
 
 function withQuery(path: string, query: Record<string, number | undefined>): string {
@@ -241,6 +247,27 @@ export class CustomerClient {
     async listTransactions(query: CustomerTransactionQuery = {}): Promise<CustomerPage<CustomerTransaction>> {
         const init = this.#init();
         return this.#client.get(withQuery('/api/customer/transaction', TransactionQueryModel.parse(query)), init);
+    }
+
+    /** The customer's one-time orders, newest first. */
+    async listOrders(options: CustomerPageOptions = {}): Promise<CustomerPage<CustomerOrder>> {
+        const init = this.#init();
+        return this.#client.get(withQuery(ORDER_PATH, PageModel.parse(options)), init);
+    }
+
+    /** One order with its lines and refund. 404 `ORDER_NOT_FOUND` when it is not theirs. */
+    async getOrder(id: number): Promise<CustomerOrder> {
+        const init = this.#init();
+        return this.#client.get(orderPath(id), init);
+    }
+
+    /**
+     * Cancels the order and refunds it in full; answers the order as it stands then. 404 `ORDER_NOT_FOUND`, 409
+     * `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE` or `ORDER_NOT_REFUNDABLE`; read them with `customerRefusalOf`.
+     */
+    async cancelOrder(id: number): Promise<CustomerOrder> {
+        const init = this.#init();
+        return this.#client.post(`${orderPath(id)}/cancel`, undefined, init);
     }
 
     /**

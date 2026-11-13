@@ -1,16 +1,16 @@
 // Core's generated subscription, customer-session and portal shapes, copied from its ajtg zod output (checkout: core
-// feat/subscriptions-checkout 3b3ce4e7c; session and portal: core feat/subscriptions-portal 0ae1fadea;
-// CustomerTransactionResponse: core fix/customer-portal-link-and-invoices 6712edb1a) because no
+// feat/subscriptions-checkout 3b3ce4e7c; session and portal: core feat/subscriptions-portal 0ae1fadea) because no
 // @adbls/api-types release carries them yet. The commit that raises that dependency to the core release with Plans 3–8
 // replaces this file with re-exports from @adbls/api-types; keep it a verbatim copy until then.
 // The checkout request and response and the portal subscription responses (the shapes the discounts change) already are
-// re-exports; the rest follows with that release.
+// re-exports, as is CustomerTransactionResponse (it carries the order and refund fields); the rest follows with that release.
 import { DynamicSubscriptionRequestModel, SubscriptionCheckoutRequestModel } from '@adbls/api-types';
 import type {
     CorrespondenceLanguage,
     CustomerSubscriptionDetailResponse,
     CustomerSubscriptionDiscount,
     CustomerSubscriptionResponse,
+    CustomerTransactionResponse,
     DynamicSubscriptionRequest,
     FulfillmentType,
     PageResponse,
@@ -27,6 +27,7 @@ export type {
     CustomerSubscriptionDetailResponse,
     CustomerSubscriptionDiscount,
     CustomerSubscriptionResponse,
+    CustomerTransactionResponse,
     DynamicSubscriptionRequest,
     FulfillmentType,
     PageResponse,
@@ -228,17 +229,4 @@ export interface CustomerPaymentMethodUpdateResponse {
     paymentMethod: CustomerPaymentMethodResponse;
     retry: CustomerPaymentRetry;
     hostedInvoiceUrl?: string;
-}
-
-export interface CustomerTransactionResponse {
-    kind: CustomerTransactionKind;
-    date: string;
-    reference: string;
-    subscriptionId?: number;
-    periodStart?: string;
-    periodEnd?: string;
-    amount: number;
-    currency: string;
-    invoiceId?: number;
-    invoiceNumber?: string;
 }
