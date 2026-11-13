@@ -28,6 +28,11 @@ export type CheckoutRefusal =
     /** 429: this visitor (or, without `clientIp`, the whole shop server) used up its budget of checkout calls or wrong codes. Wait; do not loop. */
     | { code: 'TOO_MANY_REQUESTS' };
 
+/** A product id core sent as a digit-only string, or `null` for anything else. */
+function productIdOf(value: unknown): number | null {
+    return typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : null;
+}
+
 /** Core's refusal of a one-time checkout or preview in a form a shop can act on, or `null` for any other error. */
 export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
     if (!(error instanceof AdibilisApiError)) return null;
@@ -50,7 +55,7 @@ export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
         if (Array.isArray(cancelled)) {
             return {
                 code: 'BOOKING_DATE_CANCELLED',
-                productId: typeof cancelled[0] === 'string' && /^\d+$/.test(cancelled[0]) ? Number(cancelled[0]) : null,
+                productId: productIdOf(cancelled[0]),
                 startAt: typeof cancelled[1] === 'string' && cancelled[1] !== '' ? cancelled[1] : null,
             };
         }
@@ -60,8 +65,7 @@ export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
     const notPriced = productAndCurrencyOf(errorList['SHOP_PRODUCT_NOT_PRICED']);
     if (notPriced !== null) return { code: 'SHOP_PRODUCT_NOT_PRICED', ...notPriced };
     const outOfRange = errorList['SHOP_PRODUCT_PRICE_OUT_OF_RANGE'];
-    if (Array.isArray(outOfRange) && typeof outOfRange[0] === 'string' && /^\d+$/.test(outOfRange[0])) {
-        return { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE', productId: Number(outOfRange[0]) };
-    }
+    const outOfRangeProductId = Array.isArray(outOfRange) ? productIdOf(outOfRange[0]) : null;
+    if (outOfRangeProductId !== null) return { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE', productId: outOfRangeProductId };
     return 'ORDER_DELIVERY_LINE_WITH_PRODUCT' in errorList ? { code: 'ORDER_DELIVERY_LINE_WITH_PRODUCT' } : null;
 }
