@@ -128,11 +128,23 @@ describe('resourceFile', () => {
         expect(headersOf(fetchMock)['X-Customer-Session']).toBe('tok');
     });
 
+    it('rejects a success status other than 200 or 206', async () => {
+        const { client } = clientAnswering(() => new Response(null, { status: 204 }));
+
+        await expect(resourceFile(client, 7, 31, OPTIONS)).rejects.toMatchObject({
+            name: 'AdibilisApiError',
+            status: 204,
+            body: null,
+            path: '/api/website/resource/7/file/31',
+        });
+    });
+
     it('rejects a 416 without reading the file', async () => {
         const cancel = vi.fn();
         const body = new ReadableStream<Uint8Array>({
             start(controller) {
                 controller.enqueue(new Uint8Array(1_000_000));
+                controller.close();
             },
             cancel,
         });

@@ -11,6 +11,7 @@ import type {
 import { WebsiteResourceFilterRequestModel } from '@adbls/api-types';
 import { z } from 'zod';
 import type { AdibilisClient } from '../client/api-client.js';
+import { AdibilisApiError } from '../client/errors.js';
 import { customerSessionInit } from '../customer/session-header.js';
 import { shopCallHeaders } from '../subscription/checkout-client.js';
 import type { ShopCallOptions } from '../subscription/checkout-client.js';
@@ -119,7 +120,11 @@ export interface ResourceFile {
 
 const FILE_HEADERS = ['Content-Type', 'Content-Length', 'Content-Range', 'Accept-Ranges', 'Content-Disposition'] as const;
 
-function resourceFileOf(response: Response): ResourceFile {
+function resourceFileOf(response: Response, path: string): ResourceFile {
+    if (response.status !== 200 && response.status !== 206) {
+        void response.body?.cancel();
+        throw new AdibilisApiError(response.status, null, path);
+    }
     const headers: Record<string, string> = {};
     for (const name of FILE_HEADERS) {
         const value = response.headers.get(name);
@@ -152,9 +157,10 @@ function resourceFileOf(response: Response): ResourceFile {
  */
 export async function resourceFile(client: AdibilisClient, id: number, mediaId: number, options: ResourceFileOptions): Promise<ResourceFile> {
     const range = options.range?.trim();
-    const response = await client.download(`${RESOURCE_PATH}/${IdModel.parse(id)}/file/${IdModel.parse(mediaId)}`, {
+    const path = `${RESOURCE_PATH}/${IdModel.parse(id)}/file/${IdModel.parse(mediaId)}`;
+    const response = await client.download(path, {
         headers: { ...headersOf(options), Accept: '*/*', ...(range ? { Range: range } : {}) },
         cache: 'no-store',
     });
-    return resourceFileOf(response);
+    return resourceFileOf(response, path);
 }
