@@ -22,6 +22,18 @@ export type { VatNote } from './shop/product-image.js';
 export { isValidOpenPrice, openPriceDiscount, openPriceSteps, shopPriceView } from './shop/price-view.js';
 export type { OpenPriceDiscount, OpenPriceRange, ShopPriceDiscountInput, ShopPriceInput, ShopPriceView } from './shop/price-view.js';
 export type { ProductPriceResponse, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
+export { resourceAssetUrl, rewriteResourceBody } from './resource/resource-paths.js';
+export type { ResourceAssetOptions } from './resource/resource-paths.js';
+export type {
+    ResourceFormat,
+    WebsiteResourceDetailResponse,
+    WebsiteResourceFileResponse,
+    WebsiteResourceFilterRequest,
+    WebsiteResourceGroupResponse,
+    WebsiteResourceProductResponse,
+    WebsiteResourceResponse,
+    WebsiteResourceTopicResponse,
+} from '@adbls/api-types';
 
 export type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
 export { confirmMethodOf, isDynamicEntry } from './subscription/types.js';
