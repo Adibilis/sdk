@@ -121,9 +121,11 @@ export type {
 } from './customer/customer-client.js';
 export { customerRefusalOf } from './customer/refusal.js';
 export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';
-export { getResource, listResourceProducts, listResources, listResourceTopics } from './resource/resource-client.js';
+export { getResource, listResourceProducts, listResources, listResourceTopics, resourceFile } from './resource/resource-client.js';
 export type {
     ResourceCallOptions,
+    ResourceFile,
+    ResourceFileOptions,
     ResourceFormat,
     WebsiteResourceDetailResponse,
     WebsiteResourceFileResponse,
