@@ -71,9 +71,11 @@ describe('listResources', () => {
     it('omits blank and null filters', async () => {
         const { client, fetchMock } = clientRespondingWith(200, []);
 
-        await listResources(client, { search: '  ', topicId: null }, OPTIONS);
+        await listResources(client, { search: '  ', topicId: null, groupSlug: '' }, OPTIONS);
+        await listResources(client, { groupSlug: '  ' }, OPTIONS);
 
         expect(fetchMock.mock.calls[0][0]).toBe('https://core.test/api/website/resource');
+        expect(fetchMock.mock.calls[1][0]).toBe('https://core.test/api/website/resource');
     });
 
     it('encodes the group slug', async () => {

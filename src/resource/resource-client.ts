@@ -48,7 +48,12 @@ function init(options: ResourceCallOptions): RequestInit {
 
 function queryOf(filters: WebsiteResourceFilterRequest): string {
     const search = filters.search?.trim();
-    const parsed = WebsiteResourceFilterRequestModel.parse({ ...filters, search: search ? search : undefined });
+    const groupSlug = filters.groupSlug?.trim();
+    const parsed = WebsiteResourceFilterRequestModel.parse({
+        ...filters,
+        search: search ? search : undefined,
+        groupSlug: groupSlug ? groupSlug : undefined,
+    });
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(parsed)) {
         if (value !== null && value !== undefined) params.set(key, String(value));
