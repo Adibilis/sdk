@@ -154,6 +154,19 @@ describe('createAdibilisClient', () => {
         });
     });
 
+    it('redacts a token query parameter in the path of a download refused with a non-JSON body', async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValue(new Response('<h1>Bad gateway</h1>', { status: 502, headers: { 'content-type': 'text/html' } }));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        const error = await client.download('/api/website/resource/7/file/31?token=abc.def').catch((e: AdibilisApiError) => e);
+
+        expect(error).toMatchObject({ status: 502, body: null, path: '/api/website/resource/7/file/31?token=redacted' });
+        expect(error.message).not.toContain('abc.def');
+        expect(fetchMock.mock.calls[0][0]).toBe('https://core.test/api/website/resource/7/file/31?token=abc.def');
+    });
+
     it('get still reads a text error body', async () => {
         const fetchMock = vi
             .fn()
