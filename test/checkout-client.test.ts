@@ -57,6 +57,14 @@ describe('startCheckout', () => {
         });
     });
 
+    it('passes cancellationUrl through', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+
+        await startCheckout(client, { order, returnUrl: 'https://shop.example/checkout/return', cancellationUrl: 'https://kaemo.ch/stornieren' });
+
+        expect(client.post.mock.calls[0][1]).toMatchObject({ cancellationUrl: 'https://kaemo.ch/stornieren' });
+    });
+
     it('sends preview false even when a caller slips preview true in', async () => {
         const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
         const sneaky = { order, returnUrl: 'https://shop.example/r', preview: true } as Parameters<typeof startCheckout>[1];

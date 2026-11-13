@@ -20,6 +20,9 @@ describe('checkoutRefusalOf', () => {
         ['a product without a price', refusal(400, { SHOP_PRODUCT_NOT_PRICED: ['12', 'EUR'] }), { code: 'SHOP_PRODUCT_NOT_PRICED', productId: 12, currency: 'EUR' }],
         ['a throttled call', refusal(429, { TOO_MANY_REQUESTS: [] }), { code: 'TOO_MANY_REQUESTS' }],
         ['a delivery line with a product', refusal(400, { ORDER_DELIVERY_LINE_WITH_PRODUCT: [] }), { code: 'ORDER_DELIVERY_LINE_WITH_PRODUCT' }],
+        ['a cancelled class date', refusal(409, { BOOKING_DATE_CANCELLED: ['7', '2026-11-05T16:00:00Z'] }), { code: 'BOOKING_DATE_CANCELLED', productId: 7, startAt: '2026-11-05T16:00:00Z' }],
+        ['a cancelled class date without details', refusal(409, { BOOKING_DATE_CANCELLED: [] }), { code: 'BOOKING_DATE_CANCELLED', productId: null, startAt: null }],
+        ['a cancelled class date with malformed details', refusal(409, { BOOKING_DATE_CANCELLED: ['x', 5] }), { code: 'BOOKING_DATE_CANCELLED', productId: null, startAt: null }],
     ])('reads %s', (_name, error, expected) => {
         expect(checkoutRefusalOf(error)).toEqual(expected);
     });

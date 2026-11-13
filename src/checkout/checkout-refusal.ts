@@ -15,6 +15,8 @@ export type CheckoutRefusal =
     | { code: 'SHOP_PRODUCT_NOT_AVAILABLE'; productId: number; country: string | null }
     /** 409: the code in the request cannot be redeemed (`reason`); nothing was created. A preview reports the same reason as `discountCodeRefusal` instead. `reason` is `null` for a reason this SDK version does not know. */
     | { code: 'DISCOUNT_CODE_REFUSED'; reason: DiscountCodeRefusal | null }
+    /** 409: the line's class date was cancelled by the studio; drop it from the cart and re-read the cancelled dates. */
+    | { code: 'BOOKING_DATE_CANCELLED'; productId: number | null; startAt: string | null }
     /** 400: a catalog line's open price is outside the product's range or step. Show the product's own limits and ask again. */
     | { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE'; productId: number }
     /** 404: a catalog line's product is not listed any more. Re-read the catalog. */
@@ -43,6 +45,14 @@ export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
         const reason = errorList['DISCOUNT_CODE_REFUSED'];
         if (Array.isArray(reason) && typeof reason[0] === 'string' && reason[0] !== '') {
             return { code: 'DISCOUNT_CODE_REFUSED', reason: DiscountCodeRefusalModel.options.find((known) => known === reason[0]) ?? null };
+        }
+        const cancelled = errorList['BOOKING_DATE_CANCELLED'];
+        if (Array.isArray(cancelled)) {
+            return {
+                code: 'BOOKING_DATE_CANCELLED',
+                productId: typeof cancelled[0] === 'string' && /^\d+$/.test(cancelled[0]) ? Number(cancelled[0]) : null,
+                startAt: typeof cancelled[1] === 'string' && cancelled[1] !== '' ? cancelled[1] : null,
+            };
         }
         return null;
     }
