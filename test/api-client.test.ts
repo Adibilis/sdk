@@ -139,6 +139,43 @@ describe('createAdibilisClient', () => {
         });
     });
 
+    it('download parses a JSON error body', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(JSON.stringify({ errorList: { MEDIA_NOT_FOUND: [] } }), {
+                status: 404,
+                headers: { 'content-type': 'application/json;charset=UTF-8' },
+            })
+        );
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        await expect(client.download('/api/website/resource/7/file/31')).rejects.toMatchObject({
+            status: 404,
+            body: { errorList: { MEDIA_NOT_FOUND: [] } },
+        });
+    });
+
+    it('redacts a token query parameter in the path of a download refused with a non-JSON body', async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValue(new Response('<h1>Bad gateway</h1>', { status: 502, headers: { 'content-type': 'text/html' } }));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        const error = await client.download('/api/website/resource/7/file/31?token=abc.def').catch((e: AdibilisApiError) => e);
+
+        expect(error).toMatchObject({ status: 502, body: null, path: '/api/website/resource/7/file/31?token=redacted' });
+        expect(error.message).not.toContain('abc.def');
+        expect(fetchMock.mock.calls[0][0]).toBe('https://core.test/api/website/resource/7/file/31?token=abc.def');
+    });
+
+    it('get still reads a text error body', async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValue(new Response('<h1>Bad gateway</h1>', { status: 502, headers: { 'content-type': 'text/html' } }));
+        const client = createAdibilisClient({ baseUrl: 'https://core.test', apiKey: 'k', fetch: fetchMock });
+
+        await expect(client.get('/api/shop/holidays')).rejects.toMatchObject({ status: 502, body: '<h1>Bad gateway</h1>' });
+    });
+
     it('rejects an empty api key at construction', () => {
         expect(() => createAdibilisClient({ baseUrl: 'https://core.test', apiKey: '' })).toThrow(/apiKey/);
     });

@@ -16,7 +16,8 @@ export interface AdibilisClient {
     delete<T>(path: string, init?: RequestInit): Promise<T>;
     /**
      * A GET whose answer is a file: core's `Response` as it arrived, its body not read yet, when core answers 2xx. Any other status
-     * rejects with an `AdibilisApiError`, exactly like `get`.
+     * rejects with an `AdibilisApiError`, like `get`, except that a body which is not JSON is cancelled unread and the error carries
+     * `body: null`: such a body can be the whole file (Spring answers an unsatisfiable range with 416 and the file).
      */
     download(path: string, init?: RequestInit): Promise<Response>;
 }
@@ -40,7 +41,7 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
     const baseUrl = config.baseUrl.replace(/\/+$/, '');
     const doFetch = config.fetch ?? globalThis.fetch;
 
-    async function send(path: string, init: RequestInit): Promise<Response> {
+    async function send(path: string, init: RequestInit, discardNonJsonError = false): Promise<Response> {
         const response = await doFetch(`${baseUrl}${path}`, {
             ...init,
             headers: {
@@ -51,6 +52,10 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
         });
 
         if (!response.ok) {
+            if (discardNonJsonError && !isJson(response)) {
+                void response.body?.cancel();
+                throw new AdibilisApiError(response.status, null, redactedPath(path));
+            }
             // Only status, body and path — see AdibilisApiError on why the key never travels along.
             throw new AdibilisApiError(response.status, await parseBody(response), redactedPath(path));
         }
@@ -78,12 +83,16 @@ export function createAdibilisClient(config: AdibilisClientConfig): AdibilisClie
                 body: JSON.stringify(body),
             }),
         delete: (path, init) => request(path, { ...init, method: 'DELETE' }),
-        download: (path, init) => send(path, { ...init, method: 'GET' }),
+        download: (path, init) => send(path, { ...init, method: 'GET' }, true),
     };
 }
 
 async function parseBody(response: Response): Promise<unknown> {
     const text = await response.text();
     if (!text) return null;
-    return response.headers.get('content-type')?.includes('application/json') ? JSON.parse(text) : text;
+    return isJson(response) ? JSON.parse(text) : text;
+}
+
+function isJson(response: Response): boolean {
+    return response.headers.get('content-type')?.includes('application/json') ?? false;
 }

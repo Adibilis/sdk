@@ -3,10 +3,13 @@
 // @adbls/api-types release carries them yet. The commit that raises that dependency to the core release with Plans 3–8
 // replaces this file with re-exports from @adbls/api-types; keep it a verbatim copy until then.
 // The checkout request and response and the portal subscription responses (the shapes the discounts change) already are
-// re-exports, as is CustomerTransactionResponse (it carries the order and refund fields); the rest follows with that release.
-import { DynamicSubscriptionRequestModel, SubscriptionCheckoutRequestModel } from '@adbls/api-types';
+// re-exports, as are CustomerTransactionResponse (it carries the order and refund fields) and the customer login link
+// request (it carries the sign-in purpose); the rest follows with that release.
+import { CustomerLoginLinkRequestModel, DynamicSubscriptionRequestModel, SubscriptionCheckoutRequestModel } from '@adbls/api-types';
 import type {
     CorrespondenceLanguage,
+    CustomerLoginLinkRequest,
+    CustomerLoginPurpose,
     CustomerSubscriptionDetailResponse,
     CustomerSubscriptionDiscount,
     CustomerSubscriptionResponse,
@@ -21,9 +24,11 @@ import type {
 } from '@adbls/api-types';
 import { z } from 'zod';
 
-export { DynamicSubscriptionRequestModel, SubscriptionCheckoutRequestModel };
+export { CustomerLoginLinkRequestModel, DynamicSubscriptionRequestModel, SubscriptionCheckoutRequestModel };
 export type {
     CorrespondenceLanguage,
+    CustomerLoginLinkRequest,
+    CustomerLoginPurpose,
     CustomerSubscriptionDetailResponse,
     CustomerSubscriptionDiscount,
     CustomerSubscriptionResponse,
@@ -110,14 +115,6 @@ export type SubscriptionDeliveryStatus = 'PLANNED' | 'ORDERED' | 'SKIPPED' | 'CA
 export type SubscriptionDeliverySkipReason = 'CUSTOMER' | 'OWNER' | 'PAUSE';
 export type CustomerPaymentRetry = 'NOT_NEEDED' | 'PAID' | 'PROCESSING' | 'DECLINED' | 'UNCONFIRMED';
 export type CustomerTransactionKind = 'SUBSCRIPTION_PERIOD' | 'ORDER';
-
-export const CustomerLoginLinkRequestModel = z.object({
-    email: z.string().regex(/\S/).email().min(0).max(254),
-    returnUrl: z.string().regex(/\S/).min(0).max(2048),
-    language: z.enum(['DE', 'FR', 'IT', 'EN']).optional().nullable(),
-    shopName: z.string().min(0).max(80).optional().nullable(),
-});
-export type CustomerLoginLinkRequest = z.infer<typeof CustomerLoginLinkRequestModel>;
 
 export const CustomerSessionRequestModel = z.object({
     token: z.string().regex(/\S/).min(0).max(128),

@@ -64,6 +64,16 @@ describe('customerRefusalOf', () => {
         expect(customerRefusalOf(error)).toEqual(expected);
     });
 
+    it('maps the resources sign-in codes', () => {
+        expect(customerRefusalOf(listed(404, 'CUSTOMER_SIGN_IN_DISABLED', ['Customer sign-in disabled']))).toEqual({
+            code: 'CUSTOMER_SIGN_IN_DISABLED',
+        });
+        expect(customerRefusalOf(listed(404, 'RESOURCES_MODULE_DISABLED', ['Resources module disabled']))).toEqual({
+            code: 'RESOURCES_MODULE_DISABLED',
+        });
+        expect(customerRefusalOf(listed(400, 'RESOURCES_ORIGIN_NOT_ALLOWED'))).toEqual({ code: 'RESOURCES_ORIGIN_NOT_ALLOWED' });
+    });
+
     it('reads the refusal behind a stopped updateSubscription', () => {
         const stopped = new SubscriptionUpdateError('schedule', ['plan'], null, listed(400, 'SUBSCRIPTION_BILLING_INTERVAL_CHANGE'));
         expect(customerRefusalOf(stopped)).toEqual({ code: 'SUBSCRIPTION_BILLING_INTERVAL_CHANGE' });

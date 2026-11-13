@@ -26,9 +26,34 @@ describe('requestLoginLink', () => {
 
         expect(client.post).toHaveBeenCalledWith(
             '/api/customer/login-link',
-            { ...link, language: 'DE', shopName: 'Oh! Blumen' },
+            { ...link, language: 'DE', shopName: 'Oh! Blumen', purpose: null },
             visitorHeader
         );
+    });
+
+    it('requestLoginLink sends the resources purpose', async () => {
+        const client = mockClient();
+        client.post.mockResolvedValue(null);
+
+        await requestLoginLink(client, { ...link, purpose: 'RESOURCES' }, visitor);
+
+        expect(client.post.mock.calls[0][1]).toMatchObject({ purpose: 'RESOURCES' });
+    });
+
+    it('requestLoginLink leaves the purpose to core when absent', async () => {
+        const client = mockClient();
+        client.post.mockResolvedValue(null);
+
+        await requestLoginLink(client, link, visitor);
+
+        expect(client.post.mock.calls[0][1]).toMatchObject({ purpose: null });
+    });
+
+    it('requestLoginLink rejects an unknown purpose locally', async () => {
+        const client = mockClient();
+
+        await expect(requestLoginLink(client, { ...link, purpose: 'BLOG' as never }, visitor)).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
     });
 
     it.each([

@@ -115,6 +115,7 @@ export {
     requestLoginLink,
 } from './customer/session.js';
 export type { CustomerLoginLinkRequest, CustomerSessionCookie, CustomerSignIn } from './customer/session.js';
+export type { CustomerLoginPurpose } from './subscription/wire.js';
 export { customerLanguage } from './customer/language.js';
 export type { CustomerLanguageSources } from './customer/language.js';
 export { customerFromCookies } from './customer/customer-client.js';
@@ -131,3 +132,19 @@ export type { CustomerRefusal, SubscriptionActionRefusalReason } from './custome
 export { cancelOrderByToken, getOrderCancellation } from './order/cancellation.js';
 export { orderCancellationRefusalOf } from './order/refusal.js';
 export type { OrderCancellationRefusal, OrderRefusal } from './order/refusal.js';
+export { getResource, listResourceProducts, listResources, listResourceTopics, resourceFile } from './resource/resource-client.js';
+export type {
+    ResourceCallOptions,
+    ResourceFile,
+    ResourceFileOptions,
+    ResourceFormat,
+    WebsiteResourceDetailResponse,
+    WebsiteResourceFileResponse,
+    WebsiteResourceFilterRequest,
+    WebsiteResourceGroupResponse,
+    WebsiteResourceProductResponse,
+    WebsiteResourceResponse,
+    WebsiteResourceTopicResponse,
+} from './resource/resource-client.js';
+export { resourceRefusalOf } from './resource/refusal.js';
+export type { ResourceRefusal } from './resource/refusal.js';

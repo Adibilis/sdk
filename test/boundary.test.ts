@@ -126,4 +126,18 @@ describe('entry point boundary', () => {
         expect(browser).toContain('shop/booking-rules.js');
         expect(server).toContain('shop/booking-rules.js');
     });
+
+    /**
+     * The resource client carries the key and a customer's session, and its file call streams member-only files: none of that may
+     * ship to a browser. The path helpers next to it only compose URLs and rewrite an article body, and run in the browser.
+     */
+    it('the browser entry reaches the resource paths but none of the resource clients', () => {
+        const browser = rel(reachableFrom(resolve(DIST, 'client-entry.js')));
+        const server = rel(reachableFrom(resolve(DIST, 'server.js')));
+        for (const file of ['resource/resource-client.js', 'resource/refusal.js']) {
+            expect(browser, file).not.toContain(file);
+            expect(server, file).toContain(file);
+        }
+        expect(browser).toContain('resource/resource-paths.js');
+    });
 });
