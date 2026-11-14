@@ -175,6 +175,29 @@ describe('login', () => {
         expectRedirect(response, '/account/login?error=EMAIL_INVALID&next=%2Fresource%2F12');
     });
 
+    it('reads a setup error the SDK refuses locally as SIGN_IN_UNAVAILABLE and logs the field, not the value', async () => {
+        const { client, log, routes } = setup({ shopName: 'x'.repeat(81) });
+
+        const response = await routes.login(login(fields));
+
+        expect(client.post).not.toHaveBeenCalled();
+        expectRedirect(response, '/account/login?error=SIGN_IN_UNAVAILABLE&next=%2Fresource%2F12');
+        expect(log).toHaveBeenCalledTimes(1);
+        expect(log.mock.calls[0][0]).toContain('invalid shopName');
+        expect(log.mock.calls[0][0]).not.toContain('jane@example.ch');
+        expect(log.mock.calls[0][0]).not.toContain('x'.repeat(81));
+    });
+
+    it('falls back to the request origin for a malformed forwarded host', async () => {
+        const { client, routes } = setup();
+        client.post.mockResolvedValue(null);
+
+        const response = await routes.login(login(fields, { ...proxy, 'x-forwarded-host': 'a b' }));
+
+        expect(client.post.mock.calls[0][1]).toMatchObject({ returnUrl: `${ORIGIN}/account/callback?next=%2Fresource%2F12` });
+        expectRedirect(response, '/account/login?sent=1&next=%2Fresource%2F12');
+    });
+
     it('passes the 429 on as TOO_MANY_REQUESTS', async () => {
         const { client, routes } = setup();
         client.post.mockRejectedValue(apiError(429, { TOO_MANY_REQUESTS: [] }));
@@ -379,10 +402,11 @@ describe('logout', () => {
     });
 
     it('expires both cookies without calling core when there is no session', async () => {
-        const { client, routes } = setup();
+        const { client, factory, routes } = setup();
 
         const response = await routes.logout(post('/api/account/logout', '', { 'sec-fetch-site': 'same-origin' }));
 
+        expect(factory).not.toHaveBeenCalled();
         expect(client.delete).not.toHaveBeenCalled();
         expectRedirect(response, '/account/logout');
         expect(response.headers.getSetCookie()).toEqual(EXPIRED);

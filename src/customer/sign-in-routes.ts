@@ -6,7 +6,14 @@ import type { CustomerLoginPurpose } from '../subscription/wire.js';
 import { customerFromCookies } from './customer-client.js';
 import { languageOf } from './language.js';
 import { customerRefusalOf } from './refusal.js';
-import { cookieValue, customerEmailCookie, exchangeLoginToken, expiredSignInCookies, requestLoginLink } from './session.js';
+import {
+    cookieValue,
+    customerEmailCookie,
+    customerSessionFromCookies,
+    exchangeLoginToken,
+    expiredSignInCookies,
+    requestLoginLink,
+} from './session.js';
 import type { SignInNotice } from './sign-in-notice.js';
 
 /** Where the sign-in pages and routes live on the site; every path is site-relative. */
@@ -115,6 +122,7 @@ function isOwnNavigation(request: Request): boolean {
 }
 
 function failureOf(error: unknown): string {
+    if (error instanceof ZodError) return `invalid ${[...new Set(error.issues.map((issue) => issue.path.join('.')))].join(', ')}`;
     const code = customerRefusalOf(error)?.code;
     if (code !== undefined) return code;
     if (error instanceof AdibilisApiError) return `HTTP ${error.status}`;
@@ -183,7 +191,7 @@ export function signInRoutes(options: SignInRoutesOptions): SignInRoutes {
             );
             return back({ sent: '1' });
         } catch (error) {
-            if (error instanceof ZodError) return back({ error: 'EMAIL_INVALID' });
+            if (error instanceof ZodError && error.issues.some((issue) => issue.path[0] === 'email')) return back({ error: 'EMAIL_INVALID' });
             if (isStatus(error, 429)) return back({ error: 'TOO_MANY_REQUESTS' });
             const setting = allowedOriginsSetting(error);
             log(`[sign-in] login link refused: ${failureOf(error)}${setting === null ? '' : `; add ${origin} to core's ${setting}`}`);
@@ -228,10 +236,13 @@ export function signInRoutes(options: SignInRoutesOptions): SignInRoutes {
 
     const logout = guarded(async (request) => {
         if (!isOwnNavigation(request)) return seeOther(paths.signedOut, {});
-        try {
-            await customerFromCookies(options.client(), request.headers.get('cookie'), { clientIp: clientIpOf(request.headers) })?.logout();
-        } catch (error) {
-            log(`[sign-in] logout failed: ${failureOf(error)}`);
+        const cookies = request.headers.get('cookie');
+        if (customerSessionFromCookies(cookies) !== null) {
+            try {
+                await customerFromCookies(options.client(), cookies, { clientIp: clientIpOf(request.headers) })?.logout();
+            } catch (error) {
+                log(`[sign-in] logout failed: ${failureOf(error)}`);
+            }
         }
         return seeOther(paths.signedOut, {}, expiredCookieHeaders());
     });

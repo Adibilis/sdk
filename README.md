@@ -539,7 +539,8 @@ container the request origin is the listen address. A body that is not a form re
 visitor's address for core is `clientIpOf(request.headers)`: the last `X-Forwarded-For` entry, else
 `X-Real-IP`, when it is an IP literal, else `127.0.0.1`. The callback URL core mails is built with
 `publicOrigin(request.headers, requestOrigin)`: `X-Forwarded-Host` (else `Host`) with
-`X-Forwarded-Proto`, falling back to the request's own scheme. **If core answers
+`X-Forwarded-Proto`, falling back to the request's own scheme; a host that is not a host name (with an optional
+port) or a scheme other than `http`/`https` gives the request's own origin. **If core answers
 `SHOP_ORIGIN_NOT_ALLOWED` in production, check that the ingress forwards `X-Forwarded-Proto` before
 core's settings**; the log line then says which origin to add (`add https://shop.example to core's
 SHOP_ALLOWED_ORIGINS`). A 401 from the exchange without a session code is a wrong WEBSITE key, not a

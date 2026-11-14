@@ -36,4 +36,17 @@ describe('publicOrigin', () => {
         );
         expect(publicOrigin(new Headers({ host: 'shop.example' }), 'https://0.0.0.0:3000')).toBe('https://shop.example');
     });
+
+    it('keeps a port and a bracketed IPv6 host', () => {
+        expect(publicOrigin(new Headers({ host: 'localhost:3000' }), 'http://0.0.0.0:3000')).toBe('http://localhost:3000');
+        expect(publicOrigin(new Headers({ host: '[::1]:3000' }), 'http://0.0.0.0:3000')).toBe('http://[::1]:3000');
+    });
+
+    it.each([
+        ['a host with a space', { 'x-forwarded-host': 'a b', 'x-forwarded-proto': 'https' }],
+        ['a host with a path', { 'x-forwarded-host': 'evil.example/x', 'x-forwarded-proto': 'https' }],
+        ['a scheme other than http(s)', { 'x-forwarded-host': 'shop.example', 'x-forwarded-proto': 'javascript' }],
+    ])('falls back for %s', (_name, headers) => {
+        expect(publicOrigin(new Headers(headers), 'http://localhost:3000')).toBe('http://localhost:3000');
+    });
 });
