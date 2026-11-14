@@ -1483,13 +1483,20 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.15.0 requires
-`@adbls/api-types` ^1.9.32 / core v1.9.32 or later** (the resources module and the sign-in `purpose`: an older core
-answers the resource endpoints with 404, does not know the `'RESOURCES'` purpose, and refuses the portal's sign-in
-calls with `SHOP_MODULE_DISABLED` instead of `CUSTOMER_SIGN_IN_DISABLED`). **0.16.0 keeps that floor**: the sign-in
-routes call only the endpoints 0.15.0 already did.
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.17.0 requires
+`@adbls/api-types` ^1.9.33 / core v1.9.33 or later** (the Anrede `DIVERSE`: an older core refuses a request carrying it with
+400 `REQUEST_BODY_MALFORMED`, ignores `salutation` on the newsletter sign-up and the portal's delivery person, and leaves it
+absent on `CustomerAddress`). Coming from 0.16.0, a shop changes:
 
-Earlier floors: `^1.9.32` (0.14.0) was the first core release with order cancellation, refunds and cancelled class dates; an older core
+- `customerLanguage` returns `CorrespondenceLanguage | undefined`; the `EN` fallback is gone, so leave the field out on
+  `undefined` and core uses its default.
+- `makeAddressSchema` and `makeBillingAddressSchema` require `salutation`, `AddressFormData` carries it, and
+  `AddressValidationMessages` requires `salutationRequired` (see The Anrede).
+- In your own test fixtures the types now require `CustomerAddress.salutation`.
+
+Earlier floors: `^1.9.32` (0.15.0, kept by 0.16.0) was the first with the resources module and the sign-in `purpose`; an older
+core answers the resource endpoints with 404, does not know the `'RESOURCES'` purpose, and refuses the portal's sign-in calls with
+`SHOP_MODULE_DISABLED` instead of `CUSTOMER_SIGN_IN_DISABLED`. The same `^1.9.32` (0.14.0) was the first core release with order cancellation, refunds and cancelled class dates; an older core
 answers those endpoints with 404 and does not mail `cancellationUrl`. `^1.9.31` (0.13.0) was the first with a shop price's `discounts`,
 read by `openPriceDiscount`; an older core leaves
 the field absent, so `openPriceDiscount` returns `null`; in your own test fixtures the types now require
