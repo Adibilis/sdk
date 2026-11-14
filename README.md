@@ -1484,9 +1484,9 @@ release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is
 and you can depend on it directly when you build beyond what the SDK wraps.
 
 The dependency range here is the statement of *which core releases this SDK speaks to*: **0.17.0 requires
-`@adbls/api-types` ^1.9.33 / core v1.9.33 or later** (the Anrede `DIVERSE`: an older core refuses a request carrying it with
-400 `REQUEST_BODY_MALFORMED`, ignores `salutation` on the newsletter sign-up and the portal's delivery person, and leaves it
-absent on `CustomerAddress`). Coming from 0.16.0, a shop changes:
+`@adbls/api-types` ^1.9.33 / core v1.9.33 or later** (the Anrede: an older core has no `salutation` on any of the SDK's requests
+and silently ignores it, `DIVERSE` included, so the Anrede is not stored and `CustomerAddress` returns none). Coming from 0.16.0,
+a shop changes:
 
 - `customerLanguage` returns `CorrespondenceLanguage | undefined`; the `EN` fallback is gone, so leave the field out on
   `undefined` and core uses its default.
