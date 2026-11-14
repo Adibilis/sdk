@@ -66,6 +66,15 @@ describe('delivery person salutation', () => {
         expect(client.patch.mock.calls[0][1].deliveryPerson.salutation).toBe('DIVERSE');
         expect(client.patch.mock.calls[1][1].deliveryPerson).not.toHaveProperty('salutation');
     });
+
+    it('accepts a null salutation, as a portal pre-filled from CustomerAddress.salutation sends it', async () => {
+        const { client, customer } = signedIn();
+        client.patch.mockResolvedValue(detail);
+
+        await customer.changeDeliveryPerson(9, { ...person, salutation: null });
+
+        expect(client.patch.mock.calls[0][1].deliveryPerson.salutation).toBeNull();
+    });
 });
 
 describe('state changes', () => {

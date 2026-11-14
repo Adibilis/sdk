@@ -43,7 +43,8 @@ describe.each([
         ['empty', ''],
         ['unknown', 'X'],
     ])('reports exactly the injected message for an %s salutation', (_case, salutation) => {
-        const result = make(messages).safeParse({ ...withCountry, salutation });
+        const { salutation: _dropped, ...withoutSalutation } = withCountry;
+        const result = make(messages).safeParse(salutation === undefined ? withoutSalutation : { ...withCountry, salutation });
         const seen = result.success ? [] : result.error.issues.map((i) => i.message);
         expect(seen).toEqual(['SALUTATION']);
     });
