@@ -1,11 +1,14 @@
 import type {
     CancellationCause,
+    CheckoutRequest,
     CustomerOrderLineResponse,
     CustomerOrderResponse,
     CustomerRefundResponse,
     CustomerTransactionResponse,
     OrderStatus,
     PaymentStatus,
+    PropertyEnquiryRequest,
+    PropertyLeadRequest,
     RefundStatus,
     Salutation,
 } from '@adbls/api-types';
@@ -289,4 +292,14 @@ type MatchesCore = [
     Holds<SameKeys<CustomerOrder, CustomerOrderResponse>>,
     Holds<SameKeys<CustomerOrderLine, CustomerOrderLineResponse>>,
     Holds<SameKeys<OrderRefund, CustomerRefundResponse>>,
+];
+
+type Accepts<Field, Value> = [Value] extends [NonNullable<Field>] ? true : false;
+
+// The checkout and property requests take every Anrede: a core release that narrows one of them fails this build.
+type CarriesSalutation = [
+    Holds<Accepts<NonNullable<CheckoutRequest['order']['billingPerson']>['salutation'], Salutation>>,
+    Holds<Accepts<NonNullable<CheckoutRequest['order']['deliveryPerson']>['salutation'], Salutation>>,
+    Holds<Accepts<PropertyEnquiryRequest['salutation'], Salutation>>,
+    Holds<Accepts<PropertyLeadRequest['contact']['salutation'], Salutation>>,
 ];
