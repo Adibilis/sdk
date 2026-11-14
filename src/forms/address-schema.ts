@@ -1,3 +1,4 @@
+import { SalutationModel } from '@adbls/api-types/types/dto/enums/Salutation';
 import { z } from 'zod';
 import type { AddressValidationMessages } from './messages.js';
 
@@ -13,6 +14,7 @@ const required = (message: string) => z.string({ error: message }).min(1, messag
 
 export function makeAddressSchema(v: AddressValidationMessages) {
     return z.object({
+        salutation: z.enum(SalutationModel.options, { error: v.salutationRequired }),
         firstname: required(v.firstNameRequired),
         lastname: required(v.lastNameRequired),
         company: z.string().optional(),

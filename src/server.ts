@@ -21,6 +21,8 @@ export {
     getOrderStatus,
 } from './checkout/checkout-client.js';
 export type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
+export { SalutationModel } from '@adbls/api-types';
+export type { Salutation } from '@adbls/api-types';
 export { checkoutRefusalOf } from './checkout/checkout-refusal.js';
 export type { CheckoutRefusal } from './checkout/checkout-refusal.js';
 export { checkoutStatusOutcome } from './checkout/checkout-status.js';

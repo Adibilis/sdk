@@ -5,7 +5,7 @@
 // The checkout request and response and the portal subscription responses (the shapes the discounts change) already are
 // re-exports, as are CustomerTransactionResponse (it carries the order and refund fields) and the customer login link
 // request (it carries the sign-in purpose); the rest follows with that release.
-import { CustomerLoginLinkRequestModel, DynamicSubscriptionRequestModel, SubscriptionCheckoutRequestModel } from '@adbls/api-types';
+import { CustomerLoginLinkRequestModel, DynamicSubscriptionRequestModel, SalutationModel, SubscriptionCheckoutRequestModel } from '@adbls/api-types';
 import type {
     CorrespondenceLanguage,
     CustomerLoginLinkRequest,
@@ -19,6 +19,7 @@ import type {
     PageResponse,
     PaymentStatus,
     PriceMode,
+    Salutation,
     SubscriptionCheckoutRequest,
     SubscriptionCheckoutResponse,
 } from '@adbls/api-types';
@@ -149,6 +150,7 @@ export type CustomerAddressRequest = z.infer<typeof CustomerAddressRequestModel>
 export const CustomerDeliveryPersonRequestModel = z.object({
     firstname: z.string().regex(/\S/).min(0).max(100),
     lastname: z.string().regex(/\S/).min(0).max(100),
+    salutation: SalutationModel.optional().nullable(),
     phone: z.string().min(0).max(40).optional().nullable(),
     address: CustomerAddressRequestModel,
 });
@@ -195,6 +197,7 @@ export interface CustomerPlanResponse {
 export interface CustomerAddressResponse {
     firstname?: string;
     lastname?: string;
+    salutation?: Salutation;
     street?: string;
     postalCode?: string;
     city?: string;

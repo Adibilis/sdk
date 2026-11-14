@@ -60,6 +60,22 @@ describe('order cancellation exports', () => {
     });
 });
 
+describe('customer language exports', () => {
+    const declarations = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+
+    it('the server entry exports the profile rule but not the browser one', () => {
+        const server = declarations('dist/server.d.ts');
+        expect(server).toMatch(/\bcustomerLanguage\b/);
+        expect(server).not.toMatch(/browserCustomerLanguage/);
+    });
+
+    it('the browser entry exports the browser rule and its sources type', () => {
+        const browser = declarations('dist/client-entry.d.ts');
+        expect(browser).toMatch(/browserCustomerLanguage/);
+        expect(browser).toMatch(/BrowserCustomerLanguageSources/);
+    });
+});
+
 describe('sign-in exports', () => {
     it('the server entry exports the routes, the request helpers and the email cookie', async () => {
         const server = await import('../dist/server.js');

@@ -24,6 +24,21 @@ describe('subscribeNewsletter', () => {
         expect(client.post).toHaveBeenCalledWith('/api/shop/newsletter', { ...signup, website: '', language: 'de' }, visitorHeader);
     });
 
+    it('posts the salutation', async () => {
+        const client = mockClient();
+
+        await subscribeNewsletter(client, { ...signup, salutation: 'MS' }, visitor);
+
+        expect(client.post).toHaveBeenCalledWith('/api/shop/newsletter', expect.objectContaining({ salutation: 'MS' }), visitorHeader);
+    });
+
+    it('refuses an unknown salutation locally', async () => {
+        const client = mockClient();
+
+        await expect(subscribeNewsletter(client, { ...signup, salutation: 'X' as never }, visitor)).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
     it('trims the names and the address', async () => {
         const client = mockClient();
 
@@ -54,7 +69,7 @@ describe('subscribeNewsletter', () => {
 
     it('passes a filled honeypot through verbatim, skipping every local check, so a bot gets core’s silent 202', async () => {
         const client = mockClient();
-        const bot = { firstname: '', lastname: '', email: 'not-an-address', consent: false, website: 'https://spam.example' };
+        const bot = { firstname: '', lastname: '', email: 'not-an-address', consent: false, salutation: 'X', website: 'https://spam.example' };
 
         await expect(subscribeNewsletter(client, bot as unknown as NewsletterSignupRequest, visitor)).resolves.toBeUndefined();
 

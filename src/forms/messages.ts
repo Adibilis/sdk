@@ -3,7 +3,7 @@
  *
  * Deliberately its own minimal interface rather than a consuming site's i18n type: a shop's message
  * tree carries dozens of unrelated keys, and the SDK has no business depending on that shape.
- * A site maps its own translations onto these six.
+ * A site maps its own translations onto these seven.
  */
 export interface AddressValidationMessages {
     firstNameRequired: string;
@@ -12,4 +12,5 @@ export interface AddressValidationMessages {
     cityRequired: string;
     postalCodeRequired: string;
     countryRequired: string;
+    salutationRequired: string;
 }

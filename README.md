@@ -234,17 +234,41 @@ share one place: `discount` (`{ code, total, refusal } | null`, the `CheckoutDis
 ### The buyer's document language
 
 Send `billingPerson.language` (`DE`, `FR`, `IT` or `EN`) on `startCheckout` and `startSubscriptionCheckout`. Core stores it as a
-new customer's document language, which their invoices and mails then use. A contact that already has a language keeps it, and a
-buyer without one falls back to core's default. `customerLanguage` picks the value: the language the site is shown in, else the
-browser's first language, else English. A core before 1.9.26 ignores the field.
+new customer's document language, which their invoices and mails then use. A contact that already has a language keeps it.
+`customerLanguage` picks the value: the language the site is shown in, else the browser's most preferred supported language
+(`Accept-Language` read by `q` weight, not by position), else `undefined`. On `undefined` leave the field out and core uses its
+default. A core before 1.9.26 ignores the field.
 
 ```typescript
 import { customerLanguage } from '@adbls/sdk/server';
 
-billingPerson.language = customerLanguage({
-    locale: activeLocale,                                 // the language picker's value, or the site's one fixed language
+const language = customerLanguage({
+    locale: activeLocale,                                 // the language picker's or route's value
     acceptLanguage: request.headers.get('accept-language'),
 });
+billingPerson.language = language;                        // `undefined` is omitted from the request
+```
+
+A site with one fixed language leaves `locale` out, so the browser's language counts:
+
+```typescript
+const language = customerLanguage({ acceptLanguage: request.headers.get('accept-language') });
+```
+
+In the browser, `browserCustomerLanguage` from `@adbls/sdk` reads `navigator.languages` instead of the header:
+
+```typescript
+import { browserCustomerLanguage } from '@adbls/sdk';
+
+const language = browserCustomerLanguage({ locale: activeLocale, languages: navigator.languages });
+```
+
+Both helpers return upper-case `DE|FR|IT|EN`; `subscribeNewsletter` takes the lower-case `NewsletterLanguage`:
+
+```typescript
+import { type NewsletterLanguage } from '@adbls/sdk/server';
+
+const newsletterLanguage = language?.toLowerCase() as NewsletterLanguage | undefined;
 ```
 
 ### The form under a phone keyboard
@@ -278,6 +302,33 @@ each focus inside the container the field is scrolled to `offsetTop` once the ke
 settled, never before, so the browser's own scroll does not fight it. It does nothing on a desktop.
 Verified on iOS Safari and Chrome Android, both of which keep `fixed` elements in the layout
 viewport, behind the keyboard — a fixed bottom bar stays out of the way.
+
+## The Anrede
+
+Every person a shop collects carries a `salutation`: `MR`, `MS` or `DIVERSE` (Herr, Frau, Divers). `SalutationModel` (from `@adbls/sdk`
+and `@adbls/sdk/server`) is the one list; render `SalutationModel.options` in that order and word each value in the site's own language.
+
+`makeAddressSchema` and `makeBillingAddressSchema` require it, so a form cannot submit without a choice. The message for a missing
+one is `salutationRequired`, the seventh message of `AddressValidationMessages` next to the six address ones.
+
+```typescript
+import { SalutationModel, makeAddressSchema, type Salutation } from '@adbls/sdk';
+
+// the site's own words, in each language it offers: the SDK bundles none
+const salutationWords: Record<Salutation, string> = { MR: 'Herr', MS: 'Frau', DIVERSE: 'Divers' };
+
+const schema = makeAddressSchema({ ...siteMessages, salutationRequired: 'Bitte eine Anrede wählen.' });
+
+const choices = SalutationModel.options.map((value) => ({ value, label: salutationWords[value] }));
+```
+
+`siteMessages` and `salutationWords` come from the site's own translations; typing the words as `Record<Salutation, string>` makes the
+compiler insist that all three values are worded.
+
+The wire models keep `salutation` optional, and the SDK sends it wherever a person goes to core: the checkout billing and delivery
+persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
+`submitPropertyLead`. The portal's address read (`CustomerAddress`) returns it too. A later core release will require it on these
+requests, so a shop that collects it now does not break then.
 
 ## Subscriptions
 
@@ -994,6 +1045,7 @@ await subscribeNewsletter(core, {
     firstname, lastname, email,            // required
     consent: true,                         // must be `true` — collect consent before submitting
     website,                               // the honeypot input's raw value — see below
+    salutation: 'MR',                      // optional: MR, MS or DIVERSE — see "The Anrede"
     language: 'de',                        // optional: de, fr, it or en — lower-case, exactly these
 }, { clientIp });                          // the visitor's IP, from your request
 ```
@@ -1126,6 +1178,7 @@ double-clicked button needs no guard.
 await submitPropertyEnquiry(core, property.id, {
     firstname, lastname, phone, message,   // all optional
     email,                                 // required
+    salutation: 'MS',                      // optional: MR, MS or DIVERSE — see "The Anrede"
     language: 'de',                        // optional: de, fr, it or en
     consent: true,                         // must be `true` — collect consent before submitting
     newsletter: false,                     // optional
@@ -1430,13 +1483,20 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.15.0 requires
-`@adbls/api-types` ^1.9.32 / core v1.9.32 or later** (the resources module and the sign-in `purpose`: an older core
-answers the resource endpoints with 404, does not know the `'RESOURCES'` purpose, and refuses the portal's sign-in
-calls with `SHOP_MODULE_DISABLED` instead of `CUSTOMER_SIGN_IN_DISABLED`). **0.16.0 keeps that floor**: the sign-in
-routes call only the endpoints 0.15.0 already did.
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.17.0 requires
+`@adbls/api-types` ^1.9.33 / core v1.9.33 or later** (the Anrede: an older core has no `salutation` on any of the SDK's requests
+and silently ignores it, `DIVERSE` included, so the Anrede is not stored and `CustomerAddress` returns none). Coming from 0.16.0,
+a shop changes:
 
-Earlier floors: `^1.9.32` (0.14.0) was the first core release with order cancellation, refunds and cancelled class dates; an older core
+- `customerLanguage` returns `CorrespondenceLanguage | undefined`; the `EN` fallback is gone, so leave the field out on
+  `undefined` and core uses its default.
+- `makeAddressSchema` and `makeBillingAddressSchema` require `salutation`, `AddressFormData` carries it, and
+  `AddressValidationMessages` requires `salutationRequired` (see The Anrede).
+- In your own test fixtures the types now require `CustomerAddress.salutation`.
+
+Earlier floors: `^1.9.32` (0.15.0, kept by 0.16.0) was the first with the resources module and the sign-in `purpose`; an older
+core answers the resource endpoints with 404, does not know the `'RESOURCES'` purpose, and refuses the portal's sign-in calls with
+`SHOP_MODULE_DISABLED` instead of `CUSTOMER_SIGN_IN_DISABLED`. The same `^1.9.32` (0.14.0) was the first core release with order cancellation, refunds and cancelled class dates; an older core
 answers those endpoints with 404 and does not mail `cancellationUrl`. `^1.9.31` (0.13.0) was the first with a shop price's `discounts`,
 read by `openPriceDiscount`; an older core leaves
 the field absent, so `openPriceDiscount` returns `null`; in your own test fixtures the types now require
