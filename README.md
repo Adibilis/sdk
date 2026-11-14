@@ -327,7 +327,7 @@ compiler insist that all three values are worded.
 
 The wire models keep `salutation` optional, and the SDK sends it wherever a person goes to core: the checkout billing and delivery
 persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
-`submitPropertyLead`. The portal's address read (`CustomerAddress`) returns it too. Core's next release will require it on these
+`submitPropertyLead`. The portal's address read (`CustomerAddress`) returns it too. A later core release will require it on these
 requests, so a shop that collects it now does not break then.
 
 ## Subscriptions
