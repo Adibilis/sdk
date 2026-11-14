@@ -234,18 +234,49 @@ share one place: `discount` (`{ code, total, refusal } | null`, the `CheckoutDis
 ### The buyer's document language
 
 Send `billingPerson.language` (`DE`, `FR`, `IT` or `EN`) on `startCheckout` and `startSubscriptionCheckout`. Core stores it as a
-new customer's document language, which their invoices and mails then use. A contact that already has a language keeps it, and a
-buyer without one falls back to core's default. `customerLanguage` picks the value: the language the site is shown in, else the
-browser's first language, else English. A core before 1.9.26 ignores the field.
+new customer's document language, which their invoices and mails then use. A contact that already has a language keeps it.
+`customerLanguage` picks the value: the language the site is shown in, else the browser's most preferred supported language
+(`Accept-Language` read by `q` weight, not by position), else `undefined`. On `undefined` leave the field out and core uses its
+default. A core before 1.9.26 ignores the field.
 
 ```typescript
 import { customerLanguage } from '@adbls/sdk/server';
 
-billingPerson.language = customerLanguage({
+const language = customerLanguage({
     locale: activeLocale,                                 // the language picker's value, or the site's one fixed language
     acceptLanguage: request.headers.get('accept-language'),
 });
+billingPerson.language = language;                        // `undefined` is omitted from the request
 ```
+
+In the browser, `browserCustomerLanguage` from `@adbls/sdk` reads `navigator.languages` instead of the header:
+
+```typescript
+import { browserCustomerLanguage } from '@adbls/sdk';
+
+const language = browserCustomerLanguage({ locale: activeLocale, languages: navigator.languages });
+```
+
+### The Anrede
+
+Every person a shop collects carries a `salutation`: `MR`, `MS` or `DIVERSE` (Herr, Frau, Divers). `SalutationModel` (from `@adbls/sdk`
+and `@adbls/sdk/server`) is the one list; render `SalutationModel.options` in that order and word each value in the site's own language.
+
+`makeAddressSchema` and `makeBillingAddressSchema` require it, so a form cannot submit without a choice. The message for a missing
+one is `salutationRequired`, the seventh message of `AddressValidationMessages` next to the six address ones.
+
+```typescript
+import { SalutationModel, makeAddressSchema } from '@adbls/sdk';
+
+const schema = makeAddressSchema({ ...messages, salutationRequired: 'Please choose a salutation.' });
+
+const choices = SalutationModel.options.map((value) => ({ value, label: salutationWords[value] }));
+```
+
+The wire models keep `salutation` optional, and the SDK sends it wherever a person goes to core: the checkout billing and delivery
+persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
+`submitPropertyLead`. The portal's address read (`CustomerAddress`) returns it too. Core's next release will require it on these
+requests, so a shop that collects it now does not break then.
 
 ### The form under a phone keyboard
 
