@@ -239,6 +239,8 @@ new customer's document language, which their invoices and mails then use. A con
 (`Accept-Language` read by `q` weight, not by position), else `undefined`. On `undefined` leave the field out and core uses its
 default. A core before 1.9.26 ignores the field.
 
+Both helpers return upper-case `DE|FR|IT|EN`; `subscribeNewsletter` takes lower-case, so call `.toLowerCase()` on the result there.
+
 ```typescript
 import { customerLanguage } from '@adbls/sdk/server';
 
@@ -256,27 +258,6 @@ import { browserCustomerLanguage } from '@adbls/sdk';
 
 const language = browserCustomerLanguage({ locale: activeLocale, languages: navigator.languages });
 ```
-
-### The Anrede
-
-Every person a shop collects carries a `salutation`: `MR`, `MS` or `DIVERSE` (Herr, Frau, Divers). `SalutationModel` (from `@adbls/sdk`
-and `@adbls/sdk/server`) is the one list; render `SalutationModel.options` in that order and word each value in the site's own language.
-
-`makeAddressSchema` and `makeBillingAddressSchema` require it, so a form cannot submit without a choice. The message for a missing
-one is `salutationRequired`, the seventh message of `AddressValidationMessages` next to the six address ones.
-
-```typescript
-import { SalutationModel, makeAddressSchema } from '@adbls/sdk';
-
-const schema = makeAddressSchema({ ...messages, salutationRequired: 'Please choose a salutation.' });
-
-const choices = SalutationModel.options.map((value) => ({ value, label: salutationWords[value] }));
-```
-
-The wire models keep `salutation` optional, and the SDK sends it wherever a person goes to core: the checkout billing and delivery
-persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
-`submitPropertyLead`. The portal's address read (`CustomerAddress`) returns it too. Core's next release will require it on these
-requests, so a shop that collects it now does not break then.
 
 ### The form under a phone keyboard
 
@@ -309,6 +290,33 @@ each focus inside the container the field is scrolled to `offsetTop` once the ke
 settled, never before, so the browser's own scroll does not fight it. It does nothing on a desktop.
 Verified on iOS Safari and Chrome Android, both of which keep `fixed` elements in the layout
 viewport, behind the keyboard — a fixed bottom bar stays out of the way.
+
+## The Anrede
+
+Every person a shop collects carries a `salutation`: `MR`, `MS` or `DIVERSE` (Herr, Frau, Divers). `SalutationModel` (from `@adbls/sdk`
+and `@adbls/sdk/server`) is the one list; render `SalutationModel.options` in that order and word each value in the site's own language.
+
+`makeAddressSchema` and `makeBillingAddressSchema` require it, so a form cannot submit without a choice. The message for a missing
+one is `salutationRequired`, the seventh message of `AddressValidationMessages` next to the six address ones.
+
+```typescript
+import { SalutationModel, makeAddressSchema, type Salutation } from '@adbls/sdk';
+
+// the site's own words, in each language it offers: the SDK bundles none
+const salutationWords: Record<Salutation, string> = { MR: 'Herr', MS: 'Frau', DIVERSE: 'Divers' };
+
+const schema = makeAddressSchema({ ...siteMessages, salutationRequired: 'Bitte eine Anrede wählen.' });
+
+const choices = SalutationModel.options.map((value) => ({ value, label: salutationWords[value] }));
+```
+
+`siteMessages` and `salutationWords` come from the site's own translations; typing the words as `Record<Salutation, string>` makes the
+compiler insist that all three values are worded.
+
+The wire models keep `salutation` optional, and the SDK sends it wherever a person goes to core: the checkout billing and delivery
+persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
+`submitPropertyLead`. The portal's address read (`CustomerAddress`) returns it too. Core's next release will require it on these
+requests, so a shop that collects it now does not break then.
 
 ## Subscriptions
 
@@ -1025,6 +1033,7 @@ await subscribeNewsletter(core, {
     firstname, lastname, email,            // required
     consent: true,                         // must be `true` — collect consent before submitting
     website,                               // the honeypot input's raw value — see below
+    salutation: 'MR',                      // optional: MR, MS or DIVERSE — see "The Anrede"
     language: 'de',                        // optional: de, fr, it or en — lower-case, exactly these
 }, { clientIp });                          // the visitor's IP, from your request
 ```
@@ -1157,6 +1166,7 @@ double-clicked button needs no guard.
 await submitPropertyEnquiry(core, property.id, {
     firstname, lastname, phone, message,   // all optional
     email,                                 // required
+    salutation: 'MS',                      // optional: MR, MS or DIVERSE — see "The Anrede"
     language: 'de',                        // optional: de, fr, it or en
     consent: true,                         // must be `true` — collect consent before submitting
     newsletter: false,                     // optional
