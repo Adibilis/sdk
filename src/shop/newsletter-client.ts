@@ -46,9 +46,9 @@ const SignupPayloadModel = z.object({
  * Refused (each an `AdibilisApiError`; read its `status`): 400 validation, with the violations in `err.body`
  * (`NEWSLETTER_CONSENT_REQUIRED` for `consent: false`); 429 `TOO_MANY_REQUESTS` beyond 5 sign-ups a minute per visitor or 120
  * per shop server; 503 `NEWSLETTER_NOT_STORED` (with `Retry-After: 60`) when core could not store the sign-up — try again
- * later; 401/403 a missing, wrong or under-privileged WEBSITE key. A blank name, a `salutation` that is none of `MR`, `MS` and `DIVERSE`, an address that is none, a `consent` other
- * than `true`, a `language` other than `de`, `fr`, `it` or `en`, or a `clientIp` that is no IP literal is a `ZodError` here,
- * before any request.
+ * later; 401/403 a missing, wrong or under-privileged WEBSITE key. A blank name, a `salutation` that is none of `MR`, `MS`
+ * and `DIVERSE`, an address that is none, a `consent` other than `true`, a `language` other than `de`, `fr`, `it` or `en`, or
+ * a `clientIp` that is no IP literal is a `ZodError` here, before any request.
  */
 export async function subscribeNewsletter(client: AdibilisClient, request: NewsletterSignupRequest, options: ShopCallOptions): Promise<void> {
     const headers = shopCallHeaders(options);
