@@ -21,6 +21,7 @@ describe('customerLanguage', () => {
         ['en;q=0.5,fr;q=0.9', 'FR'],
         ['fr;q=0,it', 'IT'],
         ['fr;q=abc', 'FR'],
+        ['fr;q=-1,it', 'IT'],
         ['de;q=0.8,fr;q=0.8', 'DE'],
         [' fr ; q = 0.9 , en;q=0.2', 'FR'],
     ])('falls back to the browser header %s as %s without a site language', (acceptLanguage, language) => {

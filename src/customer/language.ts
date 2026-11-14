@@ -15,9 +15,7 @@ export interface CustomerLanguageSources {
     acceptLanguage?: string | null;
 }
 
-export interface BrowserCustomerLanguageSources {
-    /** The language the visitor sees the site in (`de`, `de-CH`), from its language picker or its one fixed language. */
-    locale?: string | null;
+export interface BrowserCustomerLanguageSources extends Pick<CustomerLanguageSources, 'locale'> {
     /** `navigator.languages`, already ordered by preference. */
     languages?: readonly string[] | null;
 }

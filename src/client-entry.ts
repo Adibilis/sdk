@@ -92,5 +92,6 @@ export type { ScheduleChangeCheck } from './customer/rules.js';
 export type { OrderCancellationRefusal, OrderRefusal } from './order/refusal.js';
 export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';
 export { browserCustomerLanguage } from './customer/language.js';
+export type { BrowserCustomerLanguageSources } from './customer/language.js';
 export { SIGN_IN_NOTICES, signInNoticeOf } from './customer/sign-in-notice.js';
 export type { SignInNotice } from './customer/sign-in-notice.js';

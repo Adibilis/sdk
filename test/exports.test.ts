@@ -58,6 +58,7 @@ describe('order cancellation exports', () => {
         expect(browser).toMatch(/CancelledBooking/);
         expect(browser).toMatch(/isBookingCancelled/);
         expect(browser).toMatch(/browserCustomerLanguage/);
+        expect(browser).toMatch(/BrowserCustomerLanguageSources/);
         expect(browser).not.toMatch(/cancelOrderByToken/);
         expect(browser).not.toMatch(/fetchCancelledBookings/);
     });
