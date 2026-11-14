@@ -195,9 +195,9 @@ export interface CustomerPlanResponse {
 }
 
 export interface CustomerAddressResponse {
-    salutation?: Salutation;
     firstname?: string;
     lastname?: string;
+    salutation?: Salutation;
     street?: string;
     postalCode?: string;
     city?: string;
