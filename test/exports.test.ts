@@ -48,6 +48,8 @@ describe('order cancellation exports', () => {
         expect(server).toMatch(/isBookingCancelled/);
         expect(server).toMatch(/CustomerOrder\b/);
         expect(server).toMatch(/OrderCancellationRefusal/);
+        expect(server).toMatch(/\bcustomerLanguage\b/);
+        expect(server).not.toMatch(/browserCustomerLanguage/);
     });
 
     it('the browser entry exports the types and the date check, but not the key-holding call', () => {
@@ -55,6 +57,7 @@ describe('order cancellation exports', () => {
         expect(browser).toMatch(/CustomerOrder\b/);
         expect(browser).toMatch(/CancelledBooking/);
         expect(browser).toMatch(/isBookingCancelled/);
+        expect(browser).toMatch(/browserCustomerLanguage/);
         expect(browser).not.toMatch(/cancelOrderByToken/);
         expect(browser).not.toMatch(/fetchCancelledBookings/);
     });
