@@ -239,16 +239,20 @@ new customer's document language, which their invoices and mails then use. A con
 (`Accept-Language` read by `q` weight, not by position), else `undefined`. On `undefined` leave the field out and core uses its
 default. A core before 1.9.26 ignores the field.
 
-Both helpers return upper-case `DE|FR|IT|EN`; `subscribeNewsletter` takes lower-case, so call `.toLowerCase()` on the result there.
-
 ```typescript
 import { customerLanguage } from '@adbls/sdk/server';
 
 const language = customerLanguage({
-    locale: activeLocale,                                 // the language picker's value, or the site's one fixed language
+    locale: activeLocale,                                 // the language picker's or route's value
     acceptLanguage: request.headers.get('accept-language'),
 });
 billingPerson.language = language;                        // `undefined` is omitted from the request
+```
+
+A site with one fixed language leaves `locale` out, so the browser's language counts:
+
+```typescript
+const language = customerLanguage({ acceptLanguage: request.headers.get('accept-language') });
 ```
 
 In the browser, `browserCustomerLanguage` from `@adbls/sdk` reads `navigator.languages` instead of the header:
@@ -257,6 +261,14 @@ In the browser, `browserCustomerLanguage` from `@adbls/sdk` reads `navigator.lan
 import { browserCustomerLanguage } from '@adbls/sdk';
 
 const language = browserCustomerLanguage({ locale: activeLocale, languages: navigator.languages });
+```
+
+Both helpers return upper-case `DE|FR|IT|EN`; `subscribeNewsletter` takes the lower-case `NewsletterLanguage`:
+
+```typescript
+import { type NewsletterLanguage } from '@adbls/sdk/server';
+
+const newsletterLanguage = language?.toLowerCase() as NewsletterLanguage | undefined;
 ```
 
 ### The form under a phone keyboard

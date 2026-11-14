@@ -9,7 +9,10 @@ export function languageOf(locale: string | null | undefined): CorrespondenceLan
 }
 
 export interface CustomerLanguageSources {
-    /** The language the visitor sees the site in (`de`, `de-CH`), from its language picker or its one fixed language. */
+    /**
+     * The language the visitor sees the site in (`de`, `de-CH`), from its language picker or route. A site with one fixed language
+     * leaves it out, so the browser's language counts.
+     */
     locale?: string | null;
     /** The browser's `Accept-Language` header; its supported languages count in order of weight. */
     acceptLanguage?: string | null;
