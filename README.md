@@ -159,10 +159,11 @@ carries the buyer's code as `order.discountCode`, and the preview and the checko
 last argument `{ customerSession }` (see "Prices for a signed-in customer" under Shop catalog).
 
 ```typescript
-import { previewCheckout, startCheckout, checkoutRefusalOf } from '@adbls/sdk/server';
+import { headers } from 'next/headers';
+import { previewCheckout, startCheckout, checkoutRefusalOf, clientIpOf } from '@adbls/sdk/server';
 
 const withCode = { ...request, order: { ...order, discountCode: 'SPRING' } };   // build it once: preview and start must carry the same code
-const visitor = { customerSession, clientIp: visitorIpOf(request) };             // the buyer's IP literal as your server saw it
+const visitor = { customerSession, clientIp: clientIpOf(await headers()) };      // the buyer's IP literal as your server saw it
 const preview = await previewCheckout(core, withCode, visitor);
 // preview.discountTotal — everything the buyer saves, major units: every automatic discount (also ones open to everyone, and free delivery) plus the code; 0 without any (always present)
 // preview.discountCode — the code core applied; preview.discountCodeRefusal — why it was NOT applied (a DiscountCodeRefusal, or absent)
@@ -290,7 +291,7 @@ the subscription checkout.
 // server side — route handlers
 import {
     createAdibilisClient, fetchSubscriptionPlans, previewSubscriptionCheckout, startSubscriptionCheckout,
-    getSubscriptionStatus, subscriptionCheckoutRef, subscriptionCheckoutRefusalOf,
+    getSubscriptionStatus, subscriptionCheckoutRef, subscriptionCheckoutRefusalOf, clientIpOf,
 } from '@adbls/sdk/server';
 import type { SubscriptionCheckoutRequest } from '@adbls/sdk/server';
 // browser-safe helpers — usable in the cadence chooser too
@@ -315,7 +316,7 @@ const terms = {
     returnUrl: 'https://shop.example/subscribe/return',
 } satisfies Omit<SubscriptionCheckoutRequest, 'externalRef'>;
 const externalRef = await subscriptionCheckoutRef(cart.id, terms); // same cart → same ref; changed cart → new ref
-const visitor = { clientIp: visitorIpOf(request) };                // the buyer's IP literal as your server saw it
+const visitor = { clientIp: clientIpOf(request.headers) };          // the buyer's IP literal as your server saw it
 
 // A preview is a checkout call: it counts against the visitor's 10 a minute. Preview once, before "Subscribe", and price the live
 // line from dynamicPeriodAmount(...) instead of previewing on every change.
@@ -712,11 +713,11 @@ open):
 ```typescript
 // app/api/account/invoice/[id]/route.ts
 import { cookies } from 'next/headers';
-import { customerFromCookies, customerRefusalOf, expiredCustomerSessionCookie } from '@adbls/sdk/server';
+import { clientIpOf, customerFromCookies, customerRefusalOf, expiredCustomerSessionCookie } from '@adbls/sdk/server';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const id = Number((await params).id);
-    const customer = customerFromCookies(core, await cookies(), { clientIp: visitorIpOf(request) });
+    const customer = customerFromCookies(core, await cookies(), { clientIp: clientIpOf(request.headers) });
     if (!customer) return Response.redirect(new URL('/account/login', request.url), 303);
     if (!Number.isSafeInteger(id) || id < 1) return new Response(null, { status: 404 });
     try {
@@ -822,9 +823,10 @@ and is the same in every mail for that order. A re-opened link answers 200 with
 cancelled order with its refund; only an uncancelled order shows the booking and the cancel button.
 
 ```typescript
-import { getOrderCancellation, cancelOrderByToken, orderCancellationRefusalOf } from '@adbls/sdk/server';
+import { headers } from 'next/headers';
+import { getOrderCancellation, cancelOrderByToken, orderCancellationRefusalOf, clientIpOf } from '@adbls/sdk/server';
 
-const visitor = { clientIp: visitorIpOf(request) };
+const visitor = { clientIp: clientIpOf(await headers()) };
 try {
     const order = await getOrderCancellation(core, token, visitor);   // GET: changes nothing, safe to load on page view
     if (order.orderStatus === 'CANCELLED') {
@@ -1239,15 +1241,16 @@ URLs a browser loads. Needs core ≥ v1.9.32 with the `resources` module enabled
 
 ```typescript
 // server side — route handlers and server components only
+import { cookies, headers } from 'next/headers';
 import {
     listResources, getResource, listResourceTopics, listResourceProducts,
-    customerSessionFromCookies, resourceRefusalOf, expiredCustomerSessionCookie,
+    customerSessionFromCookies, resourceRefusalOf, expiredCustomerSessionCookie, clientIpOf,
 } from '@adbls/sdk/server';
 // browser-safe
 import { resourceAssetUrl, rewriteResourceBody } from '@adbls/sdk';
 
 const visitor = {
-    clientIp: visitorIpOf(request),                                   // the visitor's IP literal, as for the checkout
+    clientIp: clientIpOf(await headers()),                            // the visitor's IP literal, as for the checkout
     customerSession: customerSessionFromCookies(await cookies()),     // null for an anonymous visitor
 };
 
@@ -1279,13 +1282,13 @@ inline PDF viewer works. A member-only file goes through the satellite: a route 
 
 ```typescript
 // app/api/resource/[id]/file/[mediaId]/route.ts
-import { AdibilisApiError, resourceFile, customerSessionFromCookies } from '@adbls/sdk/server';
+import { AdibilisApiError, resourceFile, customerSessionFromCookies, clientIpOf } from '@adbls/sdk/server';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string; mediaId: string }> }) {
     const { id, mediaId } = await params;
     try {
         const file = await resourceFile(core, Number(id), Number(mediaId), {
-            clientIp: visitorIpOf(request),
+            clientIp: clientIpOf(request.headers),
             customerSession: customerSessionFromCookies(await cookies()),
             range: request.headers.get('range'),      // a seekable video and a resumed download need it
         });
