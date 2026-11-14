@@ -18,7 +18,7 @@ export interface CookieReader {
     get(name: string): { value: string } | undefined;
 }
 
-function cookieValue(header: string, name: string): string | undefined {
+export function cookieValue(header: string, name: string): string | undefined {
     let found: string | undefined;
     for (const part of header.split(';')) {
         const separator = part.indexOf('=');
@@ -36,6 +36,33 @@ export function customerSessionFromCookies(cookies: CookieReader | string | null
     const raw = typeof cookies === 'string' ? cookieValue(cookies, CUSTOMER_SESSION_COOKIE) : cookies?.get(CUSTOMER_SESSION_COOKIE)?.value;
     const token = raw?.trim();
     return token && SESSION_TOKEN_SHAPE.test(token) ? token : null;
+}
+
+/**
+ * The cookie the sign-in routes set next to the session, holding the customer's address for "Signed in as" — so a sign-in link
+ * sent as a lure shows whose account the visitor is in. Display only: it never authenticates anything.
+ */
+export const CUSTOMER_EMAIL_COOKIE = '__Host-adbl_customer_email';
+const MAX_EMAIL_COOKIE_LENGTH = 255;
+const EMAIL_SHAPE = /^[^\s<>"\\\u0000-\u001f\u007f�]+@[^\s<>"\\\u0000-\u001f\u007f�]+$/;
+
+function percentDecoded(value: string | undefined): string | undefined {
+    if (value === undefined) return undefined;
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * The signed-in customer's address for "Signed in as", or `null` without a well-formed session cookie or when the value is no
+ * address. A raw `Cookie` header is percent-decoded; a cookie store's value is taken as it is, because Next's stores decode it.
+ */
+export function customerEmailFromCookies(cookies: CookieReader | string | null | undefined): string | null {
+    if (customerSessionFromCookies(cookies) === null) return null;
+    const value = typeof cookies === 'string' ? percentDecoded(cookieValue(cookies, CUSTOMER_EMAIL_COOKIE)) : cookies?.get(CUSTOMER_EMAIL_COOKIE)?.value;
+    return value && value.length <= MAX_EMAIL_COOKIE_LENGTH && EMAIL_SHAPE.test(value) ? value : null;
 }
 
 export interface CustomerLoginLinkRequest {
@@ -100,6 +127,30 @@ function sessionCookie(value: string, expires: Date): CustomerSessionCookie {
 /** The cookie that ends the portal session in the browser: set it on logout, and when core answers `CUSTOMER_SESSION_INVALID`. */
 export function expiredCustomerSessionCookie(): CustomerSessionCookie {
     return sessionCookie('', new Date(0));
+}
+
+/** The session cookie or the display-email cookie, in the same two forms as `CustomerSessionCookie`. */
+export interface SignInCookie {
+    name: string;
+    /** As the visitor will read it back; a cookie API that takes `options` encodes it on the wire itself. */
+    value: string;
+    options: CustomerSessionCookie['options'];
+    /** The `Set-Cookie` header value, already percent-encoded. */
+    header: string;
+}
+
+export function customerEmailCookie(email: string, expires: Date): SignInCookie {
+    return {
+        name: CUSTOMER_EMAIL_COOKIE,
+        value: email,
+        options: { httpOnly: true, secure: true, sameSite: 'lax', path: '/', expires },
+        header: `${CUSTOMER_EMAIL_COOKIE}=${encodeURIComponent(email)}; Path=/; Expires=${expires.toUTCString()}; HttpOnly; Secure; SameSite=Lax`,
+    };
+}
+
+/** The session cookie and the display-email cookie, both expired: set them on logout and when the session is dead. */
+export function expiredSignInCookies(): SignInCookie[] {
+    return [expiredCustomerSessionCookie(), customerEmailCookie('', new Date(0))];
 }
 
 /**

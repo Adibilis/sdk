@@ -59,3 +59,27 @@ describe('order cancellation exports', () => {
         expect(browser).not.toMatch(/fetchCancelledBookings/);
     });
 });
+
+describe('sign-in exports', () => {
+    it('the server entry exports the routes, the request helpers and the email cookie', async () => {
+        const server = await import('../dist/server.js');
+        expect(typeof server.signInRoutes).toBe('function');
+        expect(typeof server.clientIpOf).toBe('function');
+        expect(typeof server.publicOrigin).toBe('function');
+        expect(typeof server.customerEmailFromCookies).toBe('function');
+        expect(typeof server.expiredSignInCookies).toBe('function');
+        expect(server.CUSTOMER_EMAIL_COOKIE).toBe('__Host-adbl_customer_email');
+        const declarations = readFileSync(new URL('../dist/server.d.ts', import.meta.url), 'utf8');
+        for (const type of ['SignInCookie', 'SignInPaths', 'SignInRoutes', 'SignInRoutesOptions']) {
+            expect(declarations, type).toMatch(new RegExp(`\\b${type}\\b`));
+        }
+    });
+
+    it('the browser entry exports the notices but not the routes', async () => {
+        const browser = await import('../dist/client-entry.js');
+        expect(browser.SIGN_IN_NOTICES).toHaveLength(5);
+        expect(typeof browser.signInNoticeOf).toBe('function');
+        expect('signInRoutes' in browser).toBe(false);
+        expect(readFileSync(new URL('../dist/client-entry.d.ts', import.meta.url), 'utf8')).toMatch(/\bSignInNotice\b/);
+    });
+});

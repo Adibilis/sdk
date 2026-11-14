@@ -89,3 +89,5 @@ export { configurationObjectOf, PAUSE_HORIZON_DAYS, plansForChange, resumeDateRa
 export type { ScheduleChangeCheck } from './customer/rules.js';
 export type { OrderCancellationRefusal, OrderRefusal } from './order/refusal.js';
 export type { CustomerRefusal, SubscriptionActionRefusalReason } from './customer/refusal.js';
+export { SIGN_IN_NOTICES, signInNoticeOf } from './customer/sign-in-notice.js';
+export type { SignInNotice } from './customer/sign-in-notice.js';

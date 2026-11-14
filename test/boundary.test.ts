@@ -140,4 +140,18 @@ describe('entry point boundary', () => {
         }
         expect(browser).toContain('resource/resource-paths.js');
     });
+
+    /**
+     * The sign-in routes take the key-holding client and set the session cookie; the notice codes their pages render are plain
+     * strings the login page reads in the browser. Same folder, two sides.
+     */
+    it('the browser entry reaches the sign-in notices but not the sign-in routes', () => {
+        const browser = rel(reachableFrom(resolve(DIST, 'client-entry.js')));
+        const server = rel(reachableFrom(resolve(DIST, 'server.js')));
+        for (const file of ['customer/sign-in-routes.js', 'request/request.js']) {
+            expect(browser, file).not.toContain(file);
+            expect(server, file).toContain(file);
+        }
+        expect(browser).toContain('customer/sign-in-notice.js');
+    });
 });

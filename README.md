@@ -448,16 +448,119 @@ Customers manage their subscriptions on the shop's own account pages, signed in 
 mails them: no password, no account to create. The shop's server keeps the session in a cookie and
 calls core for the customer. Needs a core release with the customer session and the portal.
 
+### Sign-in routes
+
+`signInRoutes` is the whole email-link sign-in as five route handlers (since 0.16.0). A Next satellite
+creates them once and exports each from its route file:
+
+```typescript
+// lib/sign-in.ts — server only: it holds the client, and with it the WEBSITE key
+import 'server-only';
+import { createAdibilisClient, signInRoutes } from '@adbls/sdk/server';
+
+export const signIn = signInRoutes({
+    client: () => createAdibilisClient({ baseUrl: process.env.ADIBILIS_BASE_URL!, apiKey: process.env.ADIBILIS_API_KEY! }),
+    shopName: 'Oh! Blumen',     // names the site in the mail
+    language: 'de',             // the mail's language when the form sends none core knows
+});
+
+// app/api/account/login/route.ts
+export const POST = signIn.login;
+// app/account/callback/route.ts — the address core mails
+export const GET = signIn.callback;
+// app/api/account/session/route.ts
+export const POST = signIn.session;
+// app/api/account/logout/route.ts
+export const POST = signIn.logout;
+// app/api/account/expired/route.ts
+export const GET = signIn.expired;
+```
+
+The handlers are plain functions, so they work unbound. The options:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `client` | (required) | the site's API client, created when a handler runs |
+| `shopName` | core's organization name | names the site in the mail, at most 80 characters |
+| `purpose` | the shop sign-in | `'RESOURCES'` for a resources site (see "Resources") |
+| `language` | none | the site's language (`de`, `de-CH`); the mail is in the first of the form's `language`, this, and the browser's first `Accept-Language` entry that is German, French, Italian or English, else in the customer's own |
+| `paths` | see below | where the pages and routes live; any subset |
+| `acceptsReturnPath` | every well-formed path | narrows the return paths the site accepts; it receives path and query (`/resource/12?x=1`) |
+| `enabled` | `() => true` | `false` answers every handler with 404 and an empty body |
+| `log` | `console.error` | receives every message the handlers write; none carries an address or a token |
+
+`paths` defaults: `login` `/account/login`, `continue` `/account/continue`, `callback` `/account/callback`,
+`session` `/api/account/session` (also the handoff cookie's `Path`), `signedIn` `/account`, `signedOut`
+`/account/logout`.
+
+| Handler | Does |
+|---|---|
+| `login` (POST) | form `email`, `next`, `language`: asks core for a link to `<public origin><callback>?next=…` and redirects to `login?sent=1`, or to `login?error=…` |
+| `callback` (GET) | parks a well-formed `token` in the `adbl_login` cookie and redirects to `continue`; calls nothing in core, answers `Referrer-Policy: no-referrer` |
+| `session` (POST) | spends the parked token, sets `__Host-adbl_customer` and `__Host-adbl_customer_email` (same expiry), deletes the handoff cookie and redirects to `next`, else `signedIn` |
+| `logout` (POST) | ends the session in core (a failure is logged and ignored), expires both cookies, redirects to `signedOut` |
+| `expired` (GET) | expires both cookies and redirects to `login?error=CUSTOMER_SESSION_INVALID`; calls nothing in core |
+
+**The pages the site renders.**
+
+- **Login** (`paths.login`): a form that POSTs to the `login` route with `email`, and optionally a hidden
+  `next` (the page's own `next` search parameter, passed on) and a hidden `language`. `sent=1` means
+  "check your inbox", whatever the address: core answers the same for every one.
+- **Continue** (`paths.continue`): a form that POSTs to `paths.session` with the hidden `next`, sent as
+  soon as the page loads or on a click. On `error` it shows the notice and the button to try again: the
+  parked token survives an outage, so the retry spends the same link.
+- **Signed out** (`paths.signedOut`), and a logout button on the account pages: a form that POSTs to the
+  `logout` route.
+- **An account page** whose call core answers 401 `CUSTOMER_SESSION_INVALID` redirects to the `expired`
+  route (with `?next=` to come back): a server component cannot clear cookies, and a page that sent the
+  visitor back to the account would loop on the dead cookie.
+
+The pages read `error` with the browser-safe `signInNoticeOf(searchParams.error)` (from `@adbls/sdk`),
+which answers one of the `SIGN_IN_NOTICES` or `null`:
+
+| Notice | From | Show |
+|---|---|---|
+| `EMAIL_INVALID` | login | the address is not valid |
+| `TOO_MANY_REQUESTS` | login, continue | too many attempts: wait a minute |
+| `CUSTOMER_LOGIN_TOKEN_INVALID` | login (after the link or the continue page) | the link was used or has expired, with the form for a new one |
+| `CUSTOMER_SESSION_INVALID` | login (after `expired`) | the session ended: sign in again |
+| `SIGN_IN_UNAVAILABLE` | login, continue | sign-in is unavailable right now (the cause is in the log) |
+
+**"Signed in as".** `customerEmailFromCookies(await cookies())` answers the signed-in address from
+`__Host-adbl_customer_email`, or `null` without a well-formed session cookie. Show it on every account
+page: a customer lured into someone else's account by that person's own link then sees whose account it
+is. It is for display only and never authenticates anything.
+
+**What the routes hold to.** A return path (`next`) is kept only when it is a path on this site of at
+most 512 printable ASCII characters, starting with a single `/` and without `\`, and then only when
+`acceptsReturnPath` accepts it; anything else (`//evil.example`, `https://…`, `/ü`) is dropped without an
+error. Every answer is a 303 to a site-relative path with `Cache-Control: private, no-store`: inside the
+container the request origin is the listen address. A body that is not a form reads as an empty form. The
+visitor's address for core is `clientIpOf(request.headers)`: the last `X-Forwarded-For` entry, else
+`X-Real-IP`, when it is an IP literal, else `127.0.0.1`. The callback URL core mails is built with
+`publicOrigin(request.headers, requestOrigin)`: `X-Forwarded-Host` (else `Host`) with
+`X-Forwarded-Proto`, falling back to the request's own scheme. **If core answers
+`SHOP_ORIGIN_NOT_ALLOWED` in production, check that the ingress forwards `X-Forwarded-Proto` before
+core's settings**; the log line then says which origin to add (`add https://shop.example to core's
+SHOP_ALLOWED_ORIGINS`). A 401 from the exchange without a session code is a wrong WEBSITE key, not a
+dead link: it answers `SIGN_IN_UNAVAILABLE` and logs "check the WEBSITE key". The `logout` and `expired`
+routes expire the cookies only when `Sec-Fetch-Site` is absent, `same-origin` or `none`, so another site
+cannot sign a visitor out.
+
+**The building blocks.** A site that is not on Next, or needs its own flow, builds the same thing from
+`requestLoginLink`, `exchangeLoginToken`, `expiredCustomerSessionCookie`, `expiredSignInCookies` and
+`CUSTOMER_EMAIL_COOKIE`; the rules below are the ones the routes follow.
+
 ```typescript
 // server side — route handlers and server components only
 import {
-    requestLoginLink, exchangeLoginToken, customerFromCookies, customerRefusalOf, expiredCustomerSessionCookie,
+    requestLoginLink, exchangeLoginToken, customerFromCookies, customerRefusalOf, expiredSignInCookies, clientIpOf,
 } from '@adbls/sdk/server';
 // browser-safe — the pickers and forms of the account pages
 import { dynamicUnitAmount, resumeDateRange, scheduleChangeOf, plansForChange, configurationObjectOf, todayIn } from '@adbls/sdk';
 // todayIn() counts in Europe/Zurich; when core sets `app.time-zone`, pass that zone: todayIn('Europe/London')
 
-const visitor = { clientIp: visitorIpOf(request) }; // the visitor's IP literal, as for the checkout
+const visitor = { clientIp: clientIpOf(request.headers) }; // the visitor's IP literal, as for the checkout
 
 // 1. The sign-in form's POST. Answer "check your inbox" whatever the address: core answers 202 for every one.
 await requestLoginLink(core, {
@@ -485,8 +588,8 @@ if (!customer) return; // no session cookie: redirect to the sign-in page
 const { content } = await customer.listSubscriptions();
 const subscription = await customer.getSubscription(id);
 // 401 CUSTOMER_SESSION_INVALID on any call: clear the cookie and sign in again.
-// A server component cannot clear cookies: redirect to a route handler that sets expiredCustomerSessionCookie() and
-// redirects to the sign-in page, or the next request loops on the same dead cookie.
+// A server component cannot clear cookies: redirect to a route handler that sets expiredSignInCookies() (the `expired`
+// route) and redirects to the sign-in page, or the next request loops on the same dead cookie.
 
 // 5. A change answers the subscription as it is now: render that, do not read it again
 const delivery = subscription.upcomingDeliveries.find((d) => d.skippable);  // the skip button only where skippable
@@ -498,12 +601,11 @@ await customer.changeConfiguration(id, { configuration, configurationText, unitA
 await customer.changeDeliveryPerson(id, deliveryPerson);
 await customer.cancel(id, { atPeriodEnd: true });                            // reactivate(id) takes it back until then
 
-// 6. Logout: end the session in core, and clear the cookie whatever happens
-const cleared = expiredCustomerSessionCookie();
+// 6. Logout: end the session in core, and clear the cookies whatever happens
 try {
     await customer.logout();
 } finally {
-    response.cookies.set(cleared.name, cleared.value, cleared.options);
+    for (const cleared of expiredSignInCookies()) response.cookies.set(cleared.name, cleared.value, cleared.options);
 }
 ```
 
@@ -523,7 +625,7 @@ one click, and scanners do not click it. Two shapes are allowed, and only these:
 
 - `GET /account/callback?token=…` renders a page that POSTs the token, as soon as it loads or on a
   click (shape 1; its POST handler must be same-origin only, see below); or
-- (shape 2) the template's flow: the GET callback route does **not** call core. It stores the token in a
+- (shape 2) the flow of the sign-in routes: the GET callback route does **not** call core. It stores the token in a
   short `httpOnly` cookie, `adbl_login` (900 s, `Secure`, `SameSite=Strict`, `Path=/api/account/session`),
   and answers 303 to `/account/continue` with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`,
   so the token leaves the address bar and the browser history at once. The continue page POSTs to
@@ -1217,23 +1319,25 @@ const downloads = resource.files.map((file) => ({ file, href: resourceAssetUrl(f
 const html = rewriteResourceBody(resource.body ?? '', assets);        // render as the article
 ```
 
-**Signing in is the customer portal's recipe with a purpose.** Any contact can receive a resources link:
-no purchase is needed. Staff and unknown addresses get the same 202 and no mail. The `returnUrl`'s origin
-must be one of core's `RESOURCES_ALLOWED_ORIGINS`. Everything after the mail is the portal's flow
-unchanged, so read "Customer portal" above for the callback, the parked token and the same-origin
-rule: `exchangeLoginToken` sets the same `__Host-adbl_customer` cookie, `customerSessionFromCookies`
-reads it, and `customerFromCookies(core, await cookies(), visitor)?.logout()` signs out.
+**Signing in is the portal's "Sign-in routes" with a purpose.** Any contact can receive a resources link:
+no purchase is needed. Staff and unknown addresses get the same 202 and no mail. The site's origin must
+be one of core's `RESOURCES_ALLOWED_ORIGINS`. Everything else is the portal's flow unchanged, so read
+"Sign-in routes" above for the five route files, the pages and the notices: the `session` route sets the
+same `__Host-adbl_customer` cookie, `customerSessionFromCookies` reads it, and the `logout` route signs
+out. A locked resource's page sends the visitor to the login page with `?next=/resource/12`, and
+`acceptsReturnPath` decides which paths may come back.
 
 ```typescript
-await requestLoginLink(core, {
-    email,
-    returnUrl: 'https://resources.example/account/callback',   // core appends ?token=…
-    language: 'de-CH',
+export const signIn = signInRoutes({
+    client: () => core,
     shopName: 'Example resources',
     purpose: 'RESOURCES',
-}, { clientIp: visitorIpOf(request) });
+    language: 'de',
+    acceptsReturnPath: (path) => /^\/resource\/\d+$/.test(path),
+});
 ```
 
+The routes' log names a refused origin (`add https://resources.example to core's RESOURCES_ALLOWED_ORIGINS`).
 `requestLoginLink` refuses a `RESOURCES` link with 400 `RESOURCES_ORIGIN_NOT_ALLOWED` (the origin is not
 in core's list: a setup error) and 404 `RESOURCES_MODULE_DISABLED`. Once the shop and resources modules
 are both off, `exchangeLoginToken` and `logout` answer 404 `CUSTOMER_SIGN_IN_DISABLED`; clear the cookie
@@ -1325,7 +1429,8 @@ and you can depend on it directly when you build beyond what the SDK wraps.
 The dependency range here is the statement of *which core releases this SDK speaks to*: **0.15.0 requires
 `@adbls/api-types` ^1.9.32 / core v1.9.32 or later** (the resources module and the sign-in `purpose`: an older core
 answers the resource endpoints with 404, does not know the `'RESOURCES'` purpose, and refuses the portal's sign-in
-calls with `SHOP_MODULE_DISABLED` instead of `CUSTOMER_SIGN_IN_DISABLED`).
+calls with `SHOP_MODULE_DISABLED` instead of `CUSTOMER_SIGN_IN_DISABLED`). **0.16.0 keeps that floor**: the sign-in
+routes call only the endpoints 0.15.0 already did.
 
 Earlier floors: `^1.9.32` (0.14.0) was the first core release with order cancellation, refunds and cancelled class dates; an older core
 answers those endpoints with 404 and does not mail `cancellationUrl`. `^1.9.31` (0.13.0) was the first with a shop price's `discounts`,
