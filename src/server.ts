@@ -107,14 +107,20 @@ export type {
     CustomerTransaction,
 } from './customer/types.js';
 export {
+    CUSTOMER_EMAIL_COOKIE,
     CUSTOMER_SESSION_COOKIE,
+    customerEmailFromCookies,
     customerSessionFromCookies,
     exchangeLoginToken,
     expiredCustomerSessionCookie,
+    expiredSignInCookies,
     MAX_SESSION_TOKEN_LENGTH,
     requestLoginLink,
 } from './customer/session.js';
-export type { CustomerLoginLinkRequest, CustomerSessionCookie, CustomerSignIn } from './customer/session.js';
+export type { CustomerLoginLinkRequest, CustomerSessionCookie, CustomerSignIn, SignInCookie } from './customer/session.js';
+export { signInRoutes } from './customer/sign-in-routes.js';
+export type { SignInPaths, SignInRoutes, SignInRoutesOptions } from './customer/sign-in-routes.js';
+export { clientIpOf, publicOrigin } from './request/request.js';
 export type { CustomerLoginPurpose } from './subscription/wire.js';
 export { customerLanguage } from './customer/language.js';
 export type { CustomerLanguageSources } from './customer/language.js';

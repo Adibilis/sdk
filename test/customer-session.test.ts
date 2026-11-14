@@ -2,7 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import { createAdibilisClient } from '../src/client/api-client';
 import { AdibilisApiError } from '../src/client/errors';
-import { customerSessionFromCookies, exchangeLoginToken, expiredCustomerSessionCookie, requestLoginLink } from '../src/customer/session';
+import {
+    CUSTOMER_EMAIL_COOKIE,
+    customerEmailFromCookies,
+    customerSessionFromCookies,
+    exchangeLoginToken,
+    expiredCustomerSessionCookie,
+    expiredSignInCookies,
+    requestLoginLink,
+} from '../src/customer/session';
 import { customerSessionInit } from '../src/customer/session-header';
 
 const visitor = { clientIp: '203.0.113.7' };
@@ -202,6 +210,46 @@ describe('customerSessionFromCookies', () => {
         expect(customerSessionFromCookies(cookie(''))).toBeNull();
         expect(customerSessionFromCookies(cookie('a'.repeat(129)))).toBeNull();
         expect(customerSessionFromCookies(cookie('a'.repeat(128)))).not.toBeNull();
+    });
+});
+
+describe('customerEmailFromCookies', () => {
+    const header = (email: string) => `__Host-adbl_customer=tok; __Host-adbl_customer_email=${email}`;
+    const store = (values: Record<string, string>) => ({
+        get: (name: string) => (name in values ? { value: values[name]! } : undefined),
+    });
+
+    it('reads the percent-encoded address from a raw Cookie header', () => {
+        expect(customerEmailFromCookies(header('jane%40example.ch'))).toBe('jane@example.ch');
+    });
+
+    it('answers null without the session cookie', () => {
+        expect(customerEmailFromCookies('__Host-adbl_customer_email=jane%40example.ch')).toBeNull();
+        expect(customerEmailFromCookies(store({ [CUSTOMER_EMAIL_COOKIE]: 'jane@example.ch' }))).toBeNull();
+        expect(customerEmailFromCookies(null)).toBeNull();
+    });
+
+    it.each([
+        ['a broken percent-encoding', '%E0%A4%A'],
+        ['a value that is no address', 'a<b@x'],
+        ['a value over 255 characters', `${'a'.repeat(250)}%40example.ch`],
+    ])('answers null for %s', (_name, value) => {
+        expect(customerEmailFromCookies(header(value))).toBeNull();
+    });
+
+    it('takes a cookie store value as it is, without decoding it a second time', () => {
+        const cookies = store({ '__Host-adbl_customer': 'tok', [CUSTOMER_EMAIL_COOKIE]: 'a+b%c@example.ch' });
+
+        expect(customerEmailFromCookies(cookies)).toBe('a+b%c@example.ch');
+    });
+});
+
+describe('expiredSignInCookies', () => {
+    it('clears the session and the email cookie with the same attributes', () => {
+        expect(expiredSignInCookies().map((cookie) => cookie.header)).toEqual([
+            '__Host-adbl_customer=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax',
+            '__Host-adbl_customer_email=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax',
+        ]);
     });
 });
 
