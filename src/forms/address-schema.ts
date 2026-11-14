@@ -1,4 +1,4 @@
-import { SalutationModel } from '@adbls/api-types';
+import { SalutationModel } from '@adbls/api-types/types/dto/enums/Salutation';
 import { z } from 'zod';
 import type { AddressValidationMessages } from './messages.js';
 

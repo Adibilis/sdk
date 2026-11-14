@@ -27,6 +27,16 @@ function reachableFrom(entry: string): Set<string> {
 
 const rel = (files: Set<string>) => [...files].map((f) => relative(DIST, f));
 
+function packagesImportedBy(files: Set<string>): Set<string> {
+    const packages = new Set<string>();
+    for (const file of files) {
+        for (const match of readFileSync(file, 'utf8').matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
+            if (!match[1]!.startsWith('.')) packages.add(match[1]!);
+        }
+    }
+    return packages;
+}
+
 describe('entry point boundary', () => {
     beforeAll(() => {
         expect(existsSync(resolve(DIST, 'client-entry.js')), 'dist/ missing — run `pnpm build` first').toBe(true);
@@ -40,6 +50,17 @@ describe('entry point boundary', () => {
      */
     it('browser entry cannot reach the api client', () => {
         expect(rel(reachableFrom(resolve(DIST, 'client-entry.js'))).filter((f) => f.startsWith('client/'))).toEqual([]);
+    });
+
+    /**
+     * The @adbls/api-types barrel is CommonJS re-exporting every generated model, which no bundler can tree-shake: one runtime
+     * import of it puts all of them in the browser bundle. The browser entry imports single models from their subpaths instead.
+     */
+    it('the browser entry imports only zod and single api-types models', () => {
+        const packages = [...packagesImportedBy(reachableFrom(resolve(DIST, 'client-entry.js')))];
+        expect(packages).toContain('zod');
+        expect(packages).toContain('@adbls/api-types/types/dto/enums/Salutation');
+        expect(packages.filter((p) => p !== 'zod' && !p.startsWith('@adbls/api-types/types/dto/enums/'))).toEqual([]);
     });
 
     it('server entry does reach the api client (guards against a vacuous test above)', () => {

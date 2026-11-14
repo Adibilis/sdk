@@ -38,8 +38,8 @@ export type {
 } from '@adbls/api-types';
 
 export type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
-export { SalutationModel } from '@adbls/api-types';
-export type { Salutation } from '@adbls/api-types';
+export { SalutationModel } from '@adbls/api-types/types/dto/enums/Salutation';
+export type { Salutation } from '@adbls/api-types/types/dto/enums/Salutation';
 export { confirmMethodOf, isDynamicEntry } from './subscription/types.js';
 export type {
     BillingInterval,
