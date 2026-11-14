@@ -10,6 +10,7 @@ const BASE = '/api/customer/subscription/9';
 const detail = { id: 9, number: 'SU-2026-0009' };
 const tueFri = { kind: 'WEEKLY', weekdays: ['TUE', 'FRI'], everyNWeeks: 1 } as const;
 const person: CustomerDeliveryPerson = {
+    salutation: 'MS',
     firstname: 'Clara',
     lastname: 'Gift',
     address: { street: 'Seestrasse 1', postalCode: '8002', city: 'Zürich', country: 'CH' },
@@ -50,6 +51,20 @@ describe('one property per call', () => {
         await customer.changeConfiguration(9, { configurationText: 'Red, no card' });
 
         expect(client.patch.mock.calls[0][1]).toEqual({ configurationText: 'Red, no card' });
+    });
+});
+
+describe('delivery person salutation', () => {
+    it('sends the salutation when given and accepts a person without one', async () => {
+        const { client, customer } = signedIn();
+        client.patch.mockResolvedValue(detail);
+        const { salutation: _omitted, ...withoutSalutation } = person;
+
+        await customer.changeDeliveryPerson(9, { ...person, salutation: 'DIVERSE' });
+        await customer.changeDeliveryPerson(9, withoutSalutation);
+
+        expect(client.patch.mock.calls[0][1].deliveryPerson.salutation).toBe('DIVERSE');
+        expect(client.patch.mock.calls[1][1].deliveryPerson).not.toHaveProperty('salutation');
     });
 });
 

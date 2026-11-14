@@ -1,3 +1,5 @@
+import type { Salutation } from '@adbls/api-types';
+
 /**
  * How an order reaches the customer — held separately from what is in the cart.
  *
@@ -6,6 +8,7 @@
  * "pickup or delivery, on this date, to this address".
  */
 export interface Address {
+    salutation?: Salutation;
     firstname: string;
     lastname: string;
     company?: string;

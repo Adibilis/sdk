@@ -7,6 +7,7 @@ import type {
     OrderStatus,
     PaymentStatus,
     RefundStatus,
+    Salutation,
 } from '@adbls/api-types';
 import type {
     BillingInterval,
@@ -98,6 +99,7 @@ export interface CustomerPlan {
 
 /** Who receives the deliveries, as entered. */
 export interface CustomerAddress {
+    salutation: Salutation | null;
     firstname: string | null;
     lastname: string | null;
     street: string | null;

@@ -3,10 +3,10 @@ import { makeAddressSchema, makeBillingAddressSchema, type AddressValidationMess
 
 const messages: AddressValidationMessages = {
     firstNameRequired: 'FIRST', lastNameRequired: 'LAST', streetRequired: 'STREET',
-    cityRequired: 'CITY', postalCodeRequired: 'POSTAL', countryRequired: 'COUNTRY',
+    cityRequired: 'CITY', postalCodeRequired: 'POSTAL', countryRequired: 'COUNTRY', salutationRequired: 'SALUTATION',
 };
 
-const valid = { firstname: 'Ada', lastname: 'Lovelace', address: 'Main 1', city: 'Bern', postalCode: '3000' };
+const valid = { salutation: 'MS', firstname: 'Ada', lastname: 'Lovelace', address: 'Main 1', city: 'Bern', postalCode: '3000' };
 
 describe('makeAddressSchema', () => {
     it('accepts a complete address without a company', () => {
@@ -25,6 +25,27 @@ describe('makeAddressSchema', () => {
 
     it('does not require a country', () => {
         expect(makeAddressSchema(messages).safeParse(valid).success).toBe(true);
+    });
+});
+
+describe.each([
+    ['makeAddressSchema', makeAddressSchema],
+    ['makeBillingAddressSchema', (v: AddressValidationMessages) => makeBillingAddressSchema(v)],
+])('%s salutation', (_name, make) => {
+    const withCountry = { ...valid, country: 'CH' };
+
+    it('accepts DIVERSE', () => {
+        expect(make(messages).safeParse({ ...withCountry, salutation: 'DIVERSE' }).success).toBe(true);
+    });
+
+    it.each([
+        ['absent', undefined],
+        ['empty', ''],
+        ['unknown', 'X'],
+    ])('reports exactly the injected message for an %s salutation', (_case, salutation) => {
+        const result = make(messages).safeParse({ ...withCountry, salutation });
+        const seen = result.success ? [] : result.error.issues.map((i) => i.message);
+        expect(seen).toEqual(['SALUTATION']);
     });
 });
 
