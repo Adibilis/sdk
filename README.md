@@ -325,10 +325,10 @@ const choices = SalutationModel.options.map((value) => ({ value, label: salutati
 `siteMessages` and `salutationWords` come from the site's own translations; typing the words as `Record<Salutation, string>` makes the
 compiler insist that all three values are worded.
 
-The wire models keep `salutation` optional, and the SDK sends it wherever a person goes to core: the checkout billing and delivery
-persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
-`submitPropertyLead`. The portal's address read (`CustomerAddress`) returns it too. A later core release will require it on these
-requests, so a shop that collects it now does not break then.
+Core requires it since v1.9.35; the wire models require it. The SDK sends it wherever a person goes to core: the checkout billing and
+delivery persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
+`submitPropertyLead`, and a request without one is a `ZodError` before any call. The portal's address read (`CustomerAddress`) returns it
+too, but optionally: a stored delivery person may lack one, so a portal form pre-fills it only when present and asks otherwise.
 
 ## Subscriptions
 
@@ -1045,7 +1045,7 @@ await subscribeNewsletter(core, {
     firstname, lastname, email,            // required
     consent: true,                         // must be `true` — collect consent before submitting
     website,                               // the honeypot input's raw value — see below
-    salutation: 'MR',                      // optional: MR, MS or DIVERSE — see "The Anrede"
+    salutation: 'MR',                      // required: MR, MS or DIVERSE — see "The Anrede"
     language: 'de',                        // optional: de, fr, it or en — lower-case, exactly these
 }, { clientIp });                          // the visitor's IP, from your request
 ```
@@ -1178,7 +1178,7 @@ double-clicked button needs no guard.
 await submitPropertyEnquiry(core, property.id, {
     firstname, lastname, phone, message,   // all optional
     email,                                 // required
-    salutation: 'MS',                      // optional: MR, MS or DIVERSE — see "The Anrede"
+    salutation: 'MS',                      // required: MR, MS or DIVERSE — see "The Anrede"
     language: 'de',                        // optional: de, fr, it or en
     consent: true,                         // must be `true` — collect consent before submitting
     newsletter: false,                     // optional
@@ -1483,10 +1483,18 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.17.0 requires
-`@adbls/api-types` ^1.9.33 / core v1.9.33 or later** (the Anrede: an older core has no `salutation` on any of the SDK's requests
-and silently ignores it, `DIVERSE` included, so the Anrede is not stored and `CustomerAddress` returns none). Coming from 0.16.0,
-a shop changes:
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.18.0 requires
+`@adbls/api-types` ^1.9.35 / core v1.9.35 or later** (core requires the Anrede on every person since then, and the SDK now refuses a
+request without one before it leaves the process). Coming from 0.17.0, a shop changes:
+
+- `salutation` is required on the checkout billing and delivery persons, the subscription checkout persons, `changeDeliveryPerson`
+  (`null` is refused too), `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of `submitPropertyLead`; a honeypot hit on
+  `subscribeNewsletter` stays unvalidated.
+- `CustomerOrder` carries `cancellableUntil` (`string | null`), which core added to the order it shows behind the cancellation link.
+
+**0.17.0 required `@adbls/api-types` ^1.9.33 / core v1.9.33 or later** (the Anrede: an older core has no `salutation` on any of the SDK's
+requests and silently ignores it, `DIVERSE` included, so the Anrede is not stored and `CustomerAddress` returns none). Coming from 0.16.0,
+a shop changed:
 
 - `customerLanguage` returns `CorrespondenceLanguage | undefined`; the `EN` fallback is gone, so leave the field out on
   `undefined` and core uses its default.

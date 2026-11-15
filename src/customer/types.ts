@@ -11,6 +11,7 @@ import type {
     PropertyLeadRequest,
     RefundStatus,
     Salutation,
+    SubscriptionCheckoutRequest,
 } from '@adbls/api-types';
 import type {
     BillingInterval,
@@ -272,6 +273,7 @@ export interface CustomerOrder {
     refund: OrderRefund;
     invoiceId: number | null;
     invoiceNumber: string | null;
+    cancellableUntil: string | null;
 }
 
 export type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
@@ -295,6 +297,7 @@ type MatchesCore = [
 ];
 
 type Accepts<Field, Value> = [Value] extends [NonNullable<Field>] ? true : false;
+type Requires<T, K extends keyof T> = undefined extends T[K] ? false : true;
 
 // The checkout and property requests take every Anrede: a core release that narrows one of them fails this build.
 type CarriesSalutation = [
@@ -302,4 +305,14 @@ type CarriesSalutation = [
     Holds<Accepts<NonNullable<CheckoutRequest['order']['deliveryPerson']>['salutation'], Salutation>>,
     Holds<Accepts<PropertyEnquiryRequest['salutation'], Salutation>>,
     Holds<Accepts<PropertyLeadRequest['contact']['salutation'], Salutation>>,
+];
+
+// Core requires the Anrede on every person it takes: a core release that makes one optional again fails this build.
+type RequiresSalutation = [
+    Holds<Requires<NonNullable<CheckoutRequest['order']['billingPerson']>, 'salutation'>>,
+    Holds<Requires<NonNullable<CheckoutRequest['order']['deliveryPerson']>, 'salutation'>>,
+    Holds<Requires<NonNullable<SubscriptionCheckoutRequest['billingPerson']>, 'salutation'>>,
+    Holds<Requires<NonNullable<SubscriptionCheckoutRequest['deliveryPerson']>, 'salutation'>>,
+    Holds<Requires<PropertyEnquiryRequest, 'salutation'>>,
+    Holds<Requires<PropertyLeadRequest['contact'], 'salutation'>>,
 ];

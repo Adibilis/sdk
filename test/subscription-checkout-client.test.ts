@@ -28,7 +28,7 @@ const request: SubscriptionCheckoutRequest = {
     schedule: { kind: 'WEEKLY', weekdays: ['TUE', 'FRI'], everyNWeeks: 1 },
     configuration: { colours: ['red'] },
     configurationText: 'Red bouquet with a card',
-    billingPerson: { email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe', address: { country: 'CH' } },
+    billingPerson: { salutation: 'MS', email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe', address: { country: 'CH' } },
     externalSource: 'flora',
     externalRef: 'cart-7f3a-0123456789abcdef',
     returnUrl: 'https://shop.example/subscribe/return',
@@ -114,6 +114,16 @@ describe('startSubscriptionCheckout', () => {
         await startSubscriptionCheckout(client, sneaky, visitor);
 
         expect(client.post.mock.calls[0][1]).toMatchObject({ preview: false });
+    });
+
+    it('refuses a billing person without a salutation before any request', async () => {
+        const client = mockClient();
+        const { salutation: _dropped, ...billingPerson } = request.billingPerson;
+
+        await expect(
+            startSubscriptionCheckout(client, { ...request, billingPerson, expectedAmount: 49.8 } as unknown as Parameters<typeof startSubscriptionCheckout>[1], visitor)
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
     });
 
     it('refuses to start without an expected amount', async () => {

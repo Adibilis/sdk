@@ -36,7 +36,7 @@ const property = {
 const page = { content: [property], number: 0, size: 20, totalPages: 1, totalElements: 1 };
 
 const lead = {
-    contact: { firstname: 'Jana', lastname: 'Meier', email: 'jana@example.ch', phone: '+41 79 000 00 00' },
+    contact: { salutation: 'MS', firstname: 'Jana', lastname: 'Meier', email: 'jana@example.ch', phone: '+41 79 000 00 00' },
     estate: { street: 'Bahnhofstrasse 1', city: 'Zug', zip: '6300' },
     category: 'HOUSE',
     type: 'VILLA',
@@ -150,6 +150,7 @@ describe('fetchPublishedProperty', () => {
 });
 
 describe('submitPropertyLead', () => {
+    type LeadInput = Parameters<typeof submitPropertyLead>[1];
     const created = { propertyId: 42, number: 'PR-2026-0042', publicToken: 'a'.repeat(64) };
 
     it('posts the validated lead and returns the token the result page needs', async () => {
@@ -166,6 +167,14 @@ describe('submitPropertyLead', () => {
         await expect(submitPropertyLead(client, withoutContact as unknown as PropertyLeadRequest)).rejects.toBeInstanceOf(
             ZodError
         );
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it('rejects a lead whose contact has no salutation before any request is made', async () => {
+        const client = mockClient();
+        const { salutation: _dropped, ...contact } = lead.contact;
+
+        await expect(submitPropertyLead(client, { ...lead, contact } as unknown as LeadInput)).rejects.toBeInstanceOf(ZodError);
         expect(client.post).not.toHaveBeenCalled();
     });
 
@@ -287,6 +296,7 @@ describe('submitPropertyEnquiry', () => {
     type EnquiryInput = Parameters<typeof submitPropertyEnquiry>[2];
 
     const enquiry = {
+        salutation: 'MS',
         firstname: 'Jana',
         lastname: 'Meier',
         email: 'jana@example.ch',
@@ -323,6 +333,16 @@ describe('submitPropertyEnquiry', () => {
 
         await expect(
             submitPropertyEnquiry(client, 42, withoutEmail as unknown as EnquiryInput)
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it('rejects an enquiry with no salutation before any request is made', async () => {
+        const client = mockClient();
+        const { salutation: _dropped, ...withoutSalutation } = enquiry;
+
+        await expect(
+            submitPropertyEnquiry(client, 42, withoutSalutation as unknown as EnquiryInput)
         ).rejects.toBeInstanceOf(ZodError);
         expect(client.post).not.toHaveBeenCalled();
     });

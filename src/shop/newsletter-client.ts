@@ -11,7 +11,7 @@ export type NewsletterLanguage = 'de' | 'fr' | 'it' | 'en';
 const NEWSLETTER_LANGUAGES = ['de', 'fr', 'it', 'en'] as const satisfies readonly NewsletterLanguage[];
 
 export interface NewsletterSignupRequest {
-    salutation?: Salutation;
+    salutation: Salutation;
     firstname: string;
     lastname: string;
     email: string;
@@ -25,7 +25,7 @@ export interface NewsletterSignupRequest {
 
 // Only what keeps an obviously incomplete sign-up from leaving the process; every other rule is core's.
 const SignupPayloadModel = z.object({
-    salutation: SalutationModel.optional(),
+    salutation: SalutationModel,
     firstname: z.string().trim().regex(/\S/, 'firstname must not be blank'),
     lastname: z.string().trim().regex(/\S/, 'lastname must not be blank'),
     email: z.string().trim().email(),

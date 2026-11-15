@@ -150,7 +150,7 @@ export type CustomerAddressRequest = z.infer<typeof CustomerAddressRequestModel>
 export const CustomerDeliveryPersonRequestModel = z.object({
     firstname: z.string().regex(/\S/).min(0).max(100),
     lastname: z.string().regex(/\S/).min(0).max(100),
-    salutation: SalutationModel.optional().nullable(),
+    salutation: SalutationModel,
     phone: z.string().min(0).max(40).optional().nullable(),
     address: CustomerAddressRequestModel,
 });

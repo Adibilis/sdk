@@ -8,6 +8,7 @@ import {
 } from '../src/subscription/wire';
 
 const person = {
+    salutation: 'MS',
     firstname: 'Clara',
     lastname: 'Gift',
     address: { street: 'Seestrasse 1', postalCode: '8002', city: 'Zürich', country: 'CH' },
@@ -22,6 +23,8 @@ describe('portal request models (copies of core generator output)', () => {
         ['a three-letter country', { ...person, address: { ...person.address, country: 'CHE' } }],
         ['a first name over 100 characters', { ...person, firstname: 'x'.repeat(101) }],
         ['no address', { ...person, address: undefined }],
+        ['no salutation', { ...person, salutation: undefined }],
+        ['a null salutation', { ...person, salutation: null }],
     ])('refuse %s', (_name, deliveryPerson) => {
         expect(CustomerDeliveryPersonChangeRequestModel.safeParse({ deliveryPerson }).success).toBe(false);
     });
