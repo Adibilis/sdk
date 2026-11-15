@@ -59,10 +59,13 @@ export type { NewsletterLanguage, NewsletterSignupRequest } from './shop/newslet
 export { fetchShopProduct, fetchShopProducts } from './shop/product-client.js';
 export type {
     ProductPriceResponse,
+    ShopProductAttributeResponse,
+    ShopProductBookingResponse,
     ShopProductImageResponse,
     ShopProductPriceResponse,
     ShopProductReadOptions,
     ShopProductResponse,
+    ShopRoomResponse,
 } from './shop/product-client.js';
 
 export type {

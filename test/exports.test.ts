@@ -117,3 +117,14 @@ describe('booking date exports', () => {
         expect(browser).not.toMatch(/fetchBookingDates/);
     });
 });
+
+describe('product booking exports', () => {
+    const declarations = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+
+    it.each(['dist/server.d.ts', 'dist/client-entry.d.ts'])('%s exports the booking, room and attribute types', (file) => {
+        const entry = declarations(file);
+        expect(entry).toMatch(/ShopProductBookingResponse/);
+        expect(entry).toMatch(/ShopProductAttributeResponse/);
+        expect(entry).toMatch(/ShopRoomResponse/);
+    });
+});

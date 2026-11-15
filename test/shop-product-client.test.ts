@@ -1,4 +1,4 @@
-import type { ShopProductResponse } from '@adbls/api-types';
+import type { ShopProductAttributeResponse, ShopProductBookingResponse, ShopProductResponse } from '@adbls/api-types';
 import { describe, expect, it, vi } from 'vitest';
 import { AdibilisApiError } from '../src/client/errors';
 import { createAdibilisClient } from '../src/client/api-client';
@@ -36,6 +36,21 @@ describe('fetchShopProducts', () => {
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toBe('https://core.test/api/shop/product');
         expect((init.headers as Record<string, string>)['X-API-Secret-Key']).toBe('k');
+    });
+
+    it('passes the booking of a class and the text attributes through untouched', async () => {
+        const booking = {
+            type: 'CLASS',
+            durationMin: 60,
+            maxParticipants: 12,
+            highlights: ['Mats provided'],
+            room: { id: 2, name: 'Studio 1', address: 'Seestrasse 1, 8002 Zürich', directions: 'Second floor' },
+        } as const satisfies ShopProductBookingResponse;
+        const attributes = [{ name: 'Level', value: 'Beginners' }] satisfies ShopProductAttributeResponse[];
+        const { client } = clientRespondingWith(200, [{ ...product, booking, attributes }]);
+        const [read] = await fetchShopProducts(client);
+        expect(read?.booking).toEqual(booking);
+        expect(read?.attributes).toEqual(attributes);
     });
 
     it('passes the availability core reports through untouched', async () => {
