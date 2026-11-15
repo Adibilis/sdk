@@ -17,7 +17,7 @@ export type { CheckoutOutcome } from './checkout/checkout-status.js';
 export { isHoliday } from './shop/holidays-client.js';
 export type { HolidayRange } from './shop/holidays-client.js';
 export { isBookingCancelled } from './shop/booking-rules.js';
-export type { CancelledBooking } from './shop/booking-rules.js';
+export type { BookingDate, BookingDateQuery, CancelledBooking } from './shop/booking-rules.js';
 export type { PickupSite } from './shop/pickup-site-client.js';
 export { priceIn, shopImageUrl, vatNoteOf } from './shop/product-image.js';
 export type { VatNote } from './shop/product-image.js';
