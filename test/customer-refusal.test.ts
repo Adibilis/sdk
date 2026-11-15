@@ -22,6 +22,11 @@ describe('customerRefusalOf', () => {
         ["another customer's order", listed(404, 'ORDER_NOT_FOUND'), { code: 'ORDER_NOT_FOUND' }],
         ['an order past cancelling', listed(409, 'ORDER_NOT_CANCELLABLE', ['FULFILLED']), { code: 'ORDER_NOT_CANCELLABLE', status: 'FULFILLED' }],
         ['an order cancelled already', listed(409, 'ORDER_ALREADY_CANCELLED'), { code: 'ORDER_ALREADY_CANCELLED' }],
+        [
+            'an order past its cancelling deadline',
+            listed(409, 'ORDER_CANCELLATION_CLOSED', ['2026-12-02T20:00:00Z']),
+            { code: 'ORDER_CANCELLATION_CLOSED', deadline: '2026-12-02T20:00:00Z' },
+        ],
         ['an order that cannot be refunded', listed(409, 'ORDER_NOT_REFUNDABLE'), { code: 'ORDER_NOT_REFUNDABLE' }],
         [
             'an action the state forbids, with its reason',

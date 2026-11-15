@@ -325,10 +325,10 @@ const choices = SalutationModel.options.map((value) => ({ value, label: salutati
 `siteMessages` and `salutationWords` come from the site's own translations; typing the words as `Record<Salutation, string>` makes the
 compiler insist that all three values are worded.
 
-The wire models keep `salutation` optional, and the SDK sends it wherever a person goes to core: the checkout billing and delivery
-persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
-`submitPropertyLead`. The portal's address read (`CustomerAddress`) returns it too. A later core release will require it on these
-requests, so a shop that collects it now does not break then.
+Core requires it since v1.9.35; the wire models require it. The SDK sends it wherever a person goes to core: the checkout billing and
+delivery persons, the portal's `changeDeliveryPerson`, `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of
+`submitPropertyLead`, and a request without one is a `ZodError` before any call. The portal's address read (`CustomerAddress`) returns it
+too, but optionally: a stored delivery person may lack one, so a portal form pre-fills it only when present and asks otherwise.
 
 ## Subscriptions
 
@@ -920,6 +920,7 @@ cancelled (`orderStatus === 'CANCELLED'`).
 | `ORDER_CANCELLATION_TOKEN_INVALID` | 401 | the token is malformed or forged, the studio rotated the link secret, or the order no longer exists (a used link is not a 401, see above): say the link is not valid; the buyer can ask the studio |
 | `ORDER_ALREADY_CANCELLED` | 409 | show the order as cancelled (read it again for the refund) |
 | `ORDER_NOT_CANCELLABLE` | 409 | past the point where a customer can cancel; `status` is the order's status, `null` for one this SDK does not know. Show "please contact the studio" |
+| `ORDER_CANCELLATION_CLOSED` | 409 | the cancelling deadline has passed; `deadline` is that instant (`null` if core sent none). Show "please contact the studio" |
 | `ORDER_NOT_REFUNDABLE` | 409 | paid in a way core cannot refund; nothing changed. Ask the studio |
 | `SHOP_MODULE_DISABLED` | 404 | core's shop module is off; the page is closed |
 | `TOO_MANY_REQUESTS` | 429 | this visitor used up 5 cancels or 60 reads a minute; wait, do not loop |
@@ -928,7 +929,7 @@ cancelled (`orderStatus === 'CANCELLED'`).
 `getOrder(id)` and `cancelOrder(id)`. They answer `CustomerOrder`s (a page of them for the list);
 `customerRefusalOf` reads the order codes next to the portal's own: 404 `ORDER_NOT_FOUND` (another
 customer's order answers the same), and on 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`
-(with `status`) and `ORDER_NOT_REFUNDABLE`. The shop's deadline applies here too: hide the button after
+(with `status`), `ORDER_CANCELLATION_CLOSED` (with `deadline`) and `ORDER_NOT_REFUNDABLE`. The shop's deadline applies here too: hide the button after
 it. `CustomerTransaction.orderId` links a payment row to its order; `refundStatus` and `refundedAt`
 mark a refunded payment.
 
@@ -1045,7 +1046,7 @@ await subscribeNewsletter(core, {
     firstname, lastname, email,            // required
     consent: true,                         // must be `true` — collect consent before submitting
     website,                               // the honeypot input's raw value — see below
-    salutation: 'MR',                      // optional: MR, MS or DIVERSE — see "The Anrede"
+    salutation: 'MR',                      // required: MR, MS or DIVERSE — see "The Anrede"
     language: 'de',                        // optional: de, fr, it or en — lower-case, exactly these
 }, { clientIp });                          // the visitor's IP, from your request
 ```
@@ -1178,7 +1179,7 @@ double-clicked button needs no guard.
 await submitPropertyEnquiry(core, property.id, {
     firstname, lastname, phone, message,   // all optional
     email,                                 // required
-    salutation: 'MS',                      // optional: MR, MS or DIVERSE — see "The Anrede"
+    salutation: 'MS',                      // required: MR, MS or DIVERSE — see "The Anrede"
     language: 'de',                        // optional: de, fr, it or en
     consent: true,                         // must be `true` — collect consent before submitting
     newsletter: false,                     // optional
@@ -1483,10 +1484,18 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.17.0 requires
-`@adbls/api-types` ^1.9.33 / core v1.9.33 or later** (the Anrede: an older core has no `salutation` on any of the SDK's requests
-and silently ignores it, `DIVERSE` included, so the Anrede is not stored and `CustomerAddress` returns none). Coming from 0.16.0,
-a shop changes:
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.18.0 requires
+`@adbls/api-types` ^1.9.35 / core v1.9.35 or later** (core requires the Anrede on every person since then, and the SDK now refuses a
+request without one before it leaves the process). Coming from 0.17.0, a shop changes:
+
+- `salutation` is required on the checkout billing and delivery persons, the subscription checkout persons, `changeDeliveryPerson`
+  (`null` is refused too), `subscribeNewsletter`, `submitPropertyEnquiry` and the contact of `submitPropertyLead`; a honeypot hit on
+  `subscribeNewsletter` stays unvalidated.
+- Every `CustomerOrder`, in the portal and behind the cancellation link, carries `cancellableUntil` (`string | null`): the cancelling deadline, the earliest among the lines, `null` when none. A cancel after it is the 409 `ORDER_CANCELLATION_CLOSED` refusal.
+
+**0.17.0 required `@adbls/api-types` ^1.9.33 / core v1.9.33 or later** (the Anrede: an older core has no `salutation` on any of the SDK's
+requests and silently ignores it, `DIVERSE` included, so the Anrede is not stored and `CustomerAddress` returns none). Coming from 0.16.0,
+a shop changed:
 
 - `customerLanguage` returns `CorrespondenceLanguage | undefined`; the `EN` fallback is gone, so leave the field out on
   `undefined` and core uses its default.
@@ -1570,7 +1579,7 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `PATCH /api/customer/subscription/{id}/plan\|schedule\|configuration\|delivery-person`, `POST …/{id}/cancel\|reactivate\|pause\|resume`, `POST …/{id}/delivery/{deliveryId}/skip` | the customer's changes; 429 beyond 10 per visitor or 300 per shop server a minute |
 | `POST\|PATCH /api/customer/subscription/{id}/payment-method` | the card change (`beginPaymentMethodUpdate`, `confirmPaymentMethod`); 429 beyond 5 per visitor or 120 per shop server a minute, and beyond 10 SetupIntents per customer an hour |
 | `GET /api/payment/order/cancellation?token=` | the order behind a cancellation mail's token (`getOrderCancellation`); 401 `ORDER_CANCELLATION_TOKEN_INVALID` for a malformed or forged token, a rotated link secret or an order that no longer exists (never for a used or old link); can also answer 404 `SHOP_MODULE_DISABLED`; 429 beyond 60 per visitor or 1200 per shop server a minute |
-| `POST /api/payment/order/cancel` | cancels that order and refunds it (`cancelOrderByToken`); 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`, `ORDER_NOT_REFUNDABLE`; 401 `ORDER_CANCELLATION_TOKEN_INVALID`; 404 `SHOP_MODULE_DISABLED`; 429 beyond 5 per visitor or 120 per shop server a minute |
+| `POST /api/payment/order/cancel` | cancels that order and refunds it (`cancelOrderByToken`); 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`, `ORDER_CANCELLATION_CLOSED`, `ORDER_NOT_REFUNDABLE`; 401 `ORDER_CANCELLATION_TOKEN_INVALID`; 404 `SHOP_MODULE_DISABLED`; 429 beyond 5 per visitor or 120 per shop server a minute |
 | `GET /api/customer/order` | one page of the signed-in customer's one-time orders (`listOrders`, `X-Customer-Session`); 429 beyond 60 per visitor or 1200 per shop server a minute |
 | `GET /api/customer/order/{id}` | one order of the signed-in customer's (`getOrder`); 404 `ORDER_NOT_FOUND` for another customer's |
 | `POST /api/customer/order/{id}/cancel` | the customer cancels and refunds an order (`cancelOrder`); the same 409 refusals as by link |

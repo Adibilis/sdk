@@ -55,25 +55,24 @@ describe('one property per call', () => {
 });
 
 describe('delivery person salutation', () => {
-    it('sends the salutation when given and accepts a person without one', async () => {
+    it('sends the salutation', async () => {
         const { client, customer } = signedIn();
         client.patch.mockResolvedValue(detail);
-        const { salutation: _omitted, ...withoutSalutation } = person;
 
         await customer.changeDeliveryPerson(9, { ...person, salutation: 'DIVERSE' });
-        await customer.changeDeliveryPerson(9, withoutSalutation);
 
         expect(client.patch.mock.calls[0][1].deliveryPerson.salutation).toBe('DIVERSE');
-        expect(client.patch.mock.calls[1][1].deliveryPerson).not.toHaveProperty('salutation');
     });
 
-    it('accepts a null salutation, as a portal pre-filled from CustomerAddress.salutation sends it', async () => {
+    it.each([
+        ['without a salutation', (() => { const { salutation: _omitted, ...rest } = person; return rest; })()],
+        ['with a null salutation', { ...person, salutation: null }],
+        ['with an unknown salutation', { ...person, salutation: 'X' }],
+    ])('refuses a person %s before any request', async (_name, deliveryPerson) => {
         const { client, customer } = signedIn();
-        client.patch.mockResolvedValue(detail);
 
-        await customer.changeDeliveryPerson(9, { ...person, salutation: null });
-
-        expect(client.patch.mock.calls[0][1].deliveryPerson.salutation).toBeNull();
+        await expect(customer.changeDeliveryPerson(9, deliveryPerson as unknown as CustomerDeliveryPerson)).rejects.toBeInstanceOf(ZodError);
+        expect(client.patch).not.toHaveBeenCalled();
     });
 });
 

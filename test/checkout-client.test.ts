@@ -18,7 +18,7 @@ const order = {
     priceMode: 'BRUTTO',
     vatTotal: 0.75,
     grandTotal: 10,
-    billingPerson: { email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe' },
+    billingPerson: { salutation: 'MS', email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe' },
     lineItems: [{ kind: 'SERVICE', textHtml: '<p>Bouquet</p>', quantity: 1, unitType: 'PIECES', unitPrice: 10, vatRate: 8.1 }],
 } as const;
 
@@ -34,6 +34,26 @@ const checkoutResponse = {
 };
 
 describe('startCheckout', () => {
+    it('refuses a delivery person without a salutation before any request', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+        const deliveryPerson = { email: 'jo@example.com', firstname: 'Jo', lastname: 'Doe' };
+
+        await expect(
+            startCheckout(client, { order: { ...order, deliveryPerson } as unknown as typeof order, returnUrl: 'https://shop.example' })
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it('refuses a billing person without a salutation before any request', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+        const { salutation: _dropped, ...billingPerson } = order.billingPerson;
+
+        await expect(
+            startCheckout(client, { order: { ...order, billingPerson } as unknown as typeof order, returnUrl: 'https://shop.example' })
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
     it('sends the buyer language', async () => {
         const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
         const billingPerson = { ...order.billingPerson, language: 'FR' } as const;
@@ -108,6 +128,16 @@ describe('startCheckout expectedAmount', () => {
 });
 
 describe('previewCheckout', () => {
+    it('refuses a billing person without a salutation before any request', async () => {
+        const client = { get: vi.fn(), post: vi.fn() };
+        const { salutation: _dropped, ...billingPerson } = order.billingPerson;
+
+        await expect(
+            previewCheckout(client, { order: { ...order, billingPerson } as unknown as typeof order, returnUrl: 'https://shop.example' })
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
     const preview = {
         orderId: null,
         orderNumber: null,

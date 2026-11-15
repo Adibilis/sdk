@@ -38,7 +38,7 @@ describe('subscription checkout pickupSiteId', () => {
         currency: 'chf',
         schedule: { kind: 'WEEKLY', weekdays: ['TUE'], everyNWeeks: 1 },
         configurationText: 'x',
-        billingPerson: { email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe', address: { country: 'CH' } },
+        billingPerson: { salutation: 'MS', email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe', address: { country: 'CH' } },
         externalSource: 'shop',
         externalRef: 'ref',
         returnUrl: 'https://example.com',

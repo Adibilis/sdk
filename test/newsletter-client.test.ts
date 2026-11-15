@@ -6,7 +6,7 @@ import { subscribeNewsletter, type NewsletterSignupRequest } from '../src/shop/n
 
 const visitor = { clientIp: '203.0.113.7' };
 const visitorHeader = { headers: { 'X-Shop-Client-Ip': '203.0.113.7' } };
-const signup: NewsletterSignupRequest = { firstname: 'Jane', lastname: 'Doe', email: 'jane@example.com', consent: true };
+const signup: NewsletterSignupRequest = { salutation: 'MR', firstname: 'Jane', lastname: 'Doe', email: 'jane@example.com', consent: true };
 
 const mockClient = () => ({ get: vi.fn(), post: vi.fn().mockResolvedValue(null), patch: vi.fn(), delete: vi.fn() });
 
@@ -77,6 +77,7 @@ describe('subscribeNewsletter', () => {
     });
 
     it.each([
+        ['no salutation', { salutation: undefined }],
         ['a blank first name', { firstname: '  ' }],
         ['a blank last name', { lastname: '' }],
         ['an address that is none', { email: 'jane' }],

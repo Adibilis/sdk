@@ -15,7 +15,7 @@ const order = {
     priceMode: 'BRUTTO',
     vatTotal: 0.75,
     grandTotal: 10,
-    billingPerson: { email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe' },
+    billingPerson: { salutation: 'MS', email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe' },
     lineItems: [{ kind: 'SERVICE', textHtml: '<p>Bouquet</p>', quantity: 1, unitType: 'PIECES', unitPrice: 10, vatRate: 8.1 }],
 } as const;
 

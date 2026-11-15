@@ -7,6 +7,8 @@ export type OrderRefusal =
     | { code: 'ORDER_ALREADY_CANCELLED' }
     /** 409: the order is past the point where a customer can cancel it (`status`). `status` is `null` for a status this SDK version does not know. */
     | { code: 'ORDER_NOT_CANCELLABLE'; status: OrderStatus | null }
+    /** 409: the cancelling deadline (`deadline`, an ISO-8601 instant, `null` when core sent none) has passed. Show "please contact the studio". */
+    | { code: 'ORDER_CANCELLATION_CLOSED'; deadline: string | null }
     /** 409: the order was paid in a way core cannot refund. Ask the studio. */
     | { code: 'ORDER_NOT_REFUNDABLE' };
 
@@ -27,6 +29,8 @@ export function orderRefusalIn(status: number, errorList: Record<string, unknown
     if (Array.isArray(notCancellable)) {
         return { code: 'ORDER_NOT_CANCELLABLE', status: OrderStatusModel.options.find((known) => known === notCancellable[0]) ?? null };
     }
+    const closed = errorList['ORDER_CANCELLATION_CLOSED'];
+    if (Array.isArray(closed)) return { code: 'ORDER_CANCELLATION_CLOSED', deadline: typeof closed[0] === 'string' ? closed[0] : null };
     return 'ORDER_NOT_REFUNDABLE' in errorList ? { code: 'ORDER_NOT_REFUNDABLE' } : null;
 }
 

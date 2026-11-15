@@ -15,7 +15,7 @@ const terms: Omit<SubscriptionCheckoutRequest, 'externalRef'> = {
     schedule: { kind: 'WEEKLY', weekdays: ['TUE', 'FRI'], everyNWeeks: 1 },
     configuration: { colours: ['red'] },
     configurationText: 'Red bouquet',
-    billingPerson: { email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe', address: { country: 'CH' } },
+    billingPerson: { salutation: 'MS', email: 'jane@example.com', firstname: 'Jane', lastname: 'Doe', address: { country: 'CH' } },
     externalSource: 'flora',
     returnUrl: 'https://shop.example/subscribe/return',
 };
@@ -41,7 +41,7 @@ describe('subscriptionCheckoutRef', () => {
         ['a start date', { startDate: '2026-11-03' }],
         ['another configuration', { configuration: { colours: ['white'] } }],
         ['another configuration text', { configurationText: 'White bouquet' }],
-        ['another delivery address', { deliveryPerson: { email: 'jo@example.com', firstname: 'Jo', lastname: 'Doe' } }],
+        ['another delivery address', { deliveryPerson: { salutation: 'MR', email: 'jo@example.com', firstname: 'Jo', lastname: 'Doe' } }],
     ] as const)('changes with %s, so core never sees the old reference with new terms', async (_name, change) => {
         expect(await subscriptionCheckoutRef('cart-7f3a', { ...terms, ...change })).not.toBe(await subscriptionCheckoutRef('cart-7f3a', terms));
     });

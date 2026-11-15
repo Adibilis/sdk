@@ -263,7 +263,7 @@ export class CustomerClient {
 
     /**
      * Cancels the order and refunds it in full; answers the order as it stands then. 404 `ORDER_NOT_FOUND`, 409
-     * `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE` or `ORDER_NOT_REFUNDABLE`; read them with `customerRefusalOf`.
+     * `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`, `ORDER_CANCELLATION_CLOSED` or `ORDER_NOT_REFUNDABLE`; read them with `customerRefusalOf`.
      */
     async cancelOrder(id: number): Promise<CustomerOrder> {
         const init = this.#init();

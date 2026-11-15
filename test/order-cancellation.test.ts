@@ -69,6 +69,8 @@ describe('orderCancellationRefusalOf', () => {
         [409, { ORDER_NOT_CANCELLABLE: ['IN_FULFILLMENT'] }, { code: 'ORDER_NOT_CANCELLABLE', status: 'IN_FULFILLMENT' }],
         [409, { ORDER_NOT_CANCELLABLE: ['NOPE'] }, { code: 'ORDER_NOT_CANCELLABLE', status: null }],
         [409, { ORDER_NOT_CANCELLABLE: [] }, { code: 'ORDER_NOT_CANCELLABLE', status: null }],
+        [409, { ORDER_CANCELLATION_CLOSED: ['2026-12-02T20:00:00Z'] }, { code: 'ORDER_CANCELLATION_CLOSED', deadline: '2026-12-02T20:00:00Z' }],
+        [409, { ORDER_CANCELLATION_CLOSED: [] }, { code: 'ORDER_CANCELLATION_CLOSED', deadline: null }],
         [409, { ORDER_NOT_REFUNDABLE: [] }, { code: 'ORDER_NOT_REFUNDABLE' }],
         [400, { ORDER_ALREADY_CANCELLED: [] }, null],
     ])('%i %j gives %j', (status, errorList, expected) => {
