@@ -15,8 +15,17 @@ export type CheckoutRefusal =
     | { code: 'SHOP_PRODUCT_NOT_AVAILABLE'; productId: number; country: string | null }
     /** 409: the code in the request cannot be redeemed (`reason`); nothing was created. A preview reports the same reason as `discountCodeRefusal` instead. `reason` is `null` for a reason this SDK version does not know. */
     | { code: 'DISCOUNT_CODE_REFUSED'; reason: DiscountCodeRefusal | null }
-    /** 409: the line's class date was cancelled by the studio; drop it from the cart and re-read the cancelled dates. */
-    | { code: 'BOOKING_DATE_CANCELLED'; productId: number | null; startAt: string | null }
+    /**
+     * 409: a line's class or appointment date cannot be booked; `productId` and `startAt` (an instant) name it, both `null` when
+     * core's answer carried none. Re-read the dates (`fetchBookingDates`) and let the buyer pick again.
+     * `BOOKING_DATE_UNKNOWN`: no such date (off the timetable or outside the booking window);
+     * `BOOKING_CLOSED`: its booking deadline (`bookableUntil`) has passed;
+     * `BOOKING_DATE_CANCELLED`: the studio cancelled it;
+     * `BOOKING_FULL`: fewer places are left than the line asks for.
+     */
+    | { code: BookingRefusalCode; productId: number | null; startAt: string | null }
+    /** 409: the checkout lost a race for the last places of a crowded date; nothing was created. Let the buyer try again. */
+    | { code: 'CHECKOUT_CONFLICT' }
     /** 400: a catalog line's open price is outside the product's range or step. Show the product's own limits and ask again. */
     | { code: 'SHOP_PRODUCT_PRICE_OUT_OF_RANGE'; productId: number }
     /** 404: a catalog line's product is not listed any more. Re-read the catalog. */
@@ -27,6 +36,11 @@ export type CheckoutRefusal =
     | { code: 'ORDER_DELIVERY_LINE_WITH_PRODUCT' }
     /** 429: this visitor (or, without `clientIp`, the whole shop server) used up its budget of checkout calls or wrong codes. Wait; do not loop. */
     | { code: 'TOO_MANY_REQUESTS' };
+
+/** The checkout refusals that name a booked date: core sends the product id and the date's start instant. */
+export type BookingRefusalCode = 'BOOKING_DATE_UNKNOWN' | 'BOOKING_CLOSED' | 'BOOKING_DATE_CANCELLED' | 'BOOKING_FULL';
+
+const BOOKING_REFUSAL_CODES: readonly BookingRefusalCode[] = ['BOOKING_DATE_UNKNOWN', 'BOOKING_CLOSED', 'BOOKING_DATE_CANCELLED', 'BOOKING_FULL'];
 
 /** A product id core sent as a digit-only string, or `null` for anything else. */
 function productIdOf(value: unknown): number | null {
@@ -51,15 +65,13 @@ export function checkoutRefusalOf(error: unknown): CheckoutRefusal | null {
         if (Array.isArray(reason) && typeof reason[0] === 'string' && reason[0] !== '') {
             return { code: 'DISCOUNT_CODE_REFUSED', reason: DiscountCodeRefusalModel.options.find((known) => known === reason[0]) ?? null };
         }
-        const cancelled = errorList['BOOKING_DATE_CANCELLED'];
-        if (Array.isArray(cancelled)) {
-            return {
-                code: 'BOOKING_DATE_CANCELLED',
-                productId: productIdOf(cancelled[0]),
-                startAt: typeof cancelled[1] === 'string' && cancelled[1] !== '' ? cancelled[1] : null,
-            };
+        for (const code of BOOKING_REFUSAL_CODES) {
+            const date = errorList[code];
+            if (Array.isArray(date)) {
+                return { code, productId: productIdOf(date[0]), startAt: typeof date[1] === 'string' && date[1] !== '' ? date[1] : null };
+            }
         }
-        return null;
+        return 'CHECKOUT_CONFLICT' in errorList ? { code: 'CHECKOUT_CONFLICT' } : null;
     }
     if (error.status !== 400) return null;
     const notPriced = productAndCurrencyOf(errorList['SHOP_PRODUCT_NOT_PRICED']);

@@ -99,3 +99,33 @@ describe('sign-in exports', () => {
         expect(readFileSync(new URL('../dist/client-entry.d.ts', import.meta.url), 'utf8')).toMatch(/\bSignInNotice\b/);
     });
 });
+
+describe('booking date exports', () => {
+    const declarations = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+
+    it('the server entry exports the call and its types', () => {
+        const server = declarations('dist/server.d.ts');
+        expect(server).toMatch(/fetchBookingDates/);
+        expect(server).toMatch(/BookingDate\b/);
+        expect(server).toMatch(/BookingDateQuery/);
+        expect(server).toMatch(/BookingRefusalCode/);
+    });
+
+    it('the browser entry exports the types, but not the key-holding call', () => {
+        const browser = declarations('dist/client-entry.d.ts');
+        expect(browser).toMatch(/BookingDate\b/);
+        expect(browser).toMatch(/BookingDateQuery/);
+        expect(browser).not.toMatch(/fetchBookingDates/);
+    });
+});
+
+describe('product booking exports', () => {
+    const declarations = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+
+    it.each(['dist/server.d.ts', 'dist/client-entry.d.ts'])('%s exports the booking, room and attribute types', (file) => {
+        const entry = declarations(file);
+        expect(entry).toMatch(/ShopProductBookingResponse/);
+        expect(entry).toMatch(/ShopProductAttributeResponse/);
+        expect(entry).toMatch(/ShopRoomResponse/);
+    });
+});

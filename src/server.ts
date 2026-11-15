@@ -5,9 +5,9 @@ export { createAdibilisClient } from './client/api-client.js';
 export type { AdibilisClient, AdibilisClientConfig } from './client/api-client.js';
 export { AdibilisApiError } from './client/errors.js';
 export { fetchHolidays } from './shop/holidays-client.js';
-export { fetchCancelledBookings } from './shop/booking-client.js';
+export { fetchBookingDates, fetchCancelledBookings } from './shop/booking-client.js';
 export { isBookingCancelled } from './shop/booking-rules.js';
-export type { CancelledBooking } from './shop/booking-rules.js';
+export type { BookingDate, BookingDateQuery, CancelledBooking } from './shop/booking-rules.js';
 export { fetchPickupSites } from './shop/pickup-site-client.js';
 export { checkCore } from './status/core-check.js';
 export type { CoreCheck, CoreCheckOptions } from './status/core-check.js';
@@ -24,7 +24,7 @@ export type { DiscountCodeRefusal, DiscountDuration } from '@adbls/api-types';
 export { SalutationModel } from '@adbls/api-types';
 export type { Salutation } from '@adbls/api-types';
 export { checkoutRefusalOf } from './checkout/checkout-refusal.js';
-export type { CheckoutRefusal } from './checkout/checkout-refusal.js';
+export type { BookingRefusalCode, CheckoutRefusal } from './checkout/checkout-refusal.js';
 export { checkoutStatusOutcome } from './checkout/checkout-status.js';
 export type { CheckoutOutcome } from './checkout/checkout-status.js';
 export type {
@@ -59,10 +59,13 @@ export type { NewsletterLanguage, NewsletterSignupRequest } from './shop/newslet
 export { fetchShopProduct, fetchShopProducts } from './shop/product-client.js';
 export type {
     ProductPriceResponse,
+    ShopProductAttributeResponse,
+    ShopProductBookingResponse,
     ShopProductImageResponse,
     ShopProductPriceResponse,
     ShopProductReadOptions,
     ShopProductResponse,
+    ShopRoomResponse,
 } from './shop/product-client.js';
 
 export type {

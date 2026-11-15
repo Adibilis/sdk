@@ -17,13 +17,21 @@ export type { CheckoutOutcome } from './checkout/checkout-status.js';
 export { isHoliday } from './shop/holidays-client.js';
 export type { HolidayRange } from './shop/holidays-client.js';
 export { isBookingCancelled } from './shop/booking-rules.js';
-export type { CancelledBooking } from './shop/booking-rules.js';
+export type { BookingDate, BookingDateQuery, CancelledBooking } from './shop/booking-rules.js';
 export type { PickupSite } from './shop/pickup-site-client.js';
 export { priceIn, shopImageUrl, vatNoteOf } from './shop/product-image.js';
 export type { VatNote } from './shop/product-image.js';
 export { isValidOpenPrice, openPriceDiscount, openPriceSteps, shopPriceView } from './shop/price-view.js';
 export type { OpenPriceDiscount, OpenPriceRange, ShopPriceDiscountInput, ShopPriceInput, ShopPriceView } from './shop/price-view.js';
-export type { ProductPriceResponse, ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from './shop/product-client.js';
+export type {
+    ProductPriceResponse,
+    ShopProductAttributeResponse,
+    ShopProductBookingResponse,
+    ShopProductImageResponse,
+    ShopProductPriceResponse,
+    ShopProductResponse,
+    ShopRoomResponse,
+} from './shop/product-client.js';
 export { resourceAssetUrl, rewriteResourceBody } from './resource/resource-paths.js';
 export type { ResourceAssetOptions } from './resource/resource-paths.js';
 export type {

@@ -23,6 +23,11 @@ describe('checkoutRefusalOf', () => {
         ['a cancelled class date', refusal(409, { BOOKING_DATE_CANCELLED: ['7', '2026-11-05T16:00:00Z'] }), { code: 'BOOKING_DATE_CANCELLED', productId: 7, startAt: '2026-11-05T16:00:00Z' }],
         ['a cancelled class date without details', refusal(409, { BOOKING_DATE_CANCELLED: [] }), { code: 'BOOKING_DATE_CANCELLED', productId: null, startAt: null }],
         ['a cancelled class date with malformed details', refusal(409, { BOOKING_DATE_CANCELLED: ['x', 5] }), { code: 'BOOKING_DATE_CANCELLED', productId: null, startAt: null }],
+        ['an unknown class date', refusal(409, { BOOKING_DATE_UNKNOWN: ['7', '2026-11-05T16:00:00Z'] }), { code: 'BOOKING_DATE_UNKNOWN', productId: 7, startAt: '2026-11-05T16:00:00Z' }],
+        ['a class date past its booking deadline', refusal(409, { BOOKING_CLOSED: ['7', '2026-11-05T16:00:00Z'] }), { code: 'BOOKING_CLOSED', productId: 7, startAt: '2026-11-05T16:00:00Z' }],
+        ['a full class date', refusal(409, { BOOKING_FULL: ['7', '2026-11-05T16:00:00Z'] }), { code: 'BOOKING_FULL', productId: 7, startAt: '2026-11-05T16:00:00Z' }],
+        ['a full class date without details', refusal(409, { BOOKING_FULL: [] }), { code: 'BOOKING_FULL', productId: null, startAt: null }],
+        ['a checkout that lost a race', refusal(409, { CHECKOUT_CONFLICT: [] }), { code: 'CHECKOUT_CONFLICT' }],
     ])('reads %s', (_name, error, expected) => {
         expect(checkoutRefusalOf(error)).toEqual(expected);
     });
@@ -34,6 +39,8 @@ describe('checkoutRefusalOf', () => {
         ['a product without a price without a currency', refusal(400, { SHOP_PRODUCT_NOT_PRICED: ['12'] })],
         ['a not found on another key', refusal(404, { SOMETHING_ELSE: [] })],
         ['an unknown key', refusal(409, { SOMETHING_ELSE: [] })],
+        ['a full class date on another status', refusal(400, { BOOKING_FULL: ['7', '2026-11-05T16:00:00Z'] })],
+        ['a checkout conflict on another status', refusal(400, { CHECKOUT_CONFLICT: [] })],
         ['a 429 without the key', refusal(429, { SOMETHING_ELSE: [] })],
         ['another status', refusal(500, { CHECKOUT_EXPIRED: [] })],
         ['a body without errorList', new AdibilisApiError(409, 'conflict', '/p')],

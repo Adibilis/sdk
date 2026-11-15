@@ -1,4 +1,11 @@
-import type { ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse } from '@adbls/api-types';
+import type {
+    ShopProductAttributeResponse,
+    ShopProductBookingResponse,
+    ShopProductImageResponse,
+    ShopProductPriceResponse,
+    ShopProductResponse,
+    ShopRoomResponse,
+} from '@adbls/api-types';
 import type { AdibilisClient } from '../client/api-client.js';
 import { customerSessionInit } from '../customer/session-header.js';
 
@@ -11,7 +18,14 @@ export interface ShopProductReadOptions {
     customerSession?: string | null;
 }
 
-export type { ShopProductImageResponse, ShopProductPriceResponse, ShopProductResponse };
+export type {
+    ShopProductAttributeResponse,
+    ShopProductBookingResponse,
+    ShopProductImageResponse,
+    ShopProductPriceResponse,
+    ShopProductResponse,
+    ShopRoomResponse,
+};
 
 /** The name this SDK exported the shop price under before core named it `ShopProductPriceResponse`. */
 export type ProductPriceResponse = ShopProductPriceResponse;
