@@ -10,9 +10,12 @@ const BookingDateQueryModel = z.object({
 });
 
 /**
- * The bookable dates of one listed class or appointment (`productId`), or of every listed one, ordered by start. `from` and `to`
- * are days (`YYYY-MM-DD`, core's time zone), inclusive; without them core answers the product's whole booking window. A listed date
- * can be `bookable: false` (past its booking deadline, cancelled or full): show it greyed out, not as a choice. With `options` the call carries `X-Shop-Client-Ip`.
+ * The dates of one listed class or appointment (`productId`), or of every listed one, ordered by start, then product id.
+ * `from` and `to` are days (`YYYY-MM-DD`, core's time zone), inclusive. Core lists only dates starting after now and clamps
+ * the range to today through 365 days ahead and to each product's booking window, so without them it answers the whole window;
+ * a range wholly outside, or with `from` after `to`, answers `[]`, not an error. A class lists at most its first
+ * `maxDatesShown` dates of the range, whatever their state. A listed date can be `bookable: false` (past its booking deadline,
+ * cancelled or full): show it greyed out, not as a choice. With `options` the call carries `X-Shop-Client-Ip`.
  * An invalid query or address rejects the promise with a ZodError before any request is made.
  */
 export async function fetchBookingDates(client: AdibilisClient, query: BookingDateQuery = {}, options?: ShopCallOptions): Promise<BookingDate[]> {

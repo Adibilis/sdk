@@ -177,7 +177,8 @@ try {
     // CHECKOUT_EXPIRED, CHECKOUT_PAYMENT_IN_PROGRESS, SHOP_PRODUCT_NOT_AVAILABLE → as above;
     // DISCOUNT_CODE_REFUSED → refusal.reason, the code field's error (nothing was created);
     // BOOKING_DATE_UNKNOWN, BOOKING_CLOSED, BOOKING_DATE_CANCELLED, BOOKING_FULL → a line's class or appointment date cannot be
-    //   booked (see "Booking dates" under Shop catalog); refusal.productId / refusal.startAt name it (both `null` when core's
+    //   booked: a dated line (productId plus externalRef `<key>@<ISO instant>`, see "Booking dates" under Shop catalog);
+    //   preview and checkout both refuse it; refusal.productId / refusal.startAt name it (both `null` when core's
     //   answer carried none): drop the line or let the buyer pick another date, and re-read fetchBookingDates;
     // CHECKOUT_CONFLICT → the checkout lost a race for the last places of a crowded date; nothing was created: let the buyer try again;
     // SHOP_PRODUCT_NOT_FOUND → a catalog line's product is not listed any more; SHOP_PRODUCT_NOT_PRICED → refusal.productId has no price in refusal.currency;
@@ -885,7 +886,7 @@ try {
     if (order.orderStatus === 'CANCELLED') {
         // a re-opened link: show the cancelled order and order.refund.status, no button
     } else {
-        // show order.lines, and the button only while the shop's own deadline has not passed
+        // show order.lines, and the button only while order.cancellableUntil is null or still in the future
         const cancelled = await cancelOrderByToken(core, token, visitor); // on the buyer's confirm, never on page load
         // cancelled.refund.status says what to tell the buyer, see below
     }
@@ -896,10 +897,13 @@ try {
 
 A blank or over-long token (core takes at most 200 characters) throws a `ZodError` and sends nothing.
 
-**The deadline is the shop's.** Core never refuses a cancellation because it is too late: it does not
-know your classes' rules. The shop computes the deadline from the lines' `externalRef` (the reference
-your cart put on each line) and shows the cancel button only before it. Core still refuses an order
-that is past cancelling for its own reasons (`ORDER_NOT_CANCELLABLE`).
+**The deadline is core's (core ≥ v1.9.35).** Core fixes each dated line's cancelling deadline when the
+order is booked (the `cancellableUntil` of the date it was sold under) and every `CustomerOrder` carries
+the earliest of them as `cancellableUntil` (an instant; `null` when no line has a deadline). Show the
+cancel button only while `cancellableUntil` is `null` or still in the future; do not compute a deadline
+yourself. A cancel at or after it is refused with 409 `ORDER_CANCELLATION_CLOSED` carrying the deadline:
+the backstop for a page left open past it. Core still refuses an order that is past cancelling for its
+own reasons (`ORDER_NOT_CANCELLABLE`). The studio is never held to the deadline.
 
 **What to show for `refund.status`.** Every cancelled order carries `refund`: `{ status, amount, currency, refundedAt }`.
 
@@ -931,8 +935,8 @@ cancelled (`orderStatus === 'CANCELLED'`).
 `getOrder(id)` and `cancelOrder(id)`. They answer `CustomerOrder`s (a page of them for the list);
 `customerRefusalOf` reads the order codes next to the portal's own: 404 `ORDER_NOT_FOUND` (another
 customer's order answers the same), and on 409 `ORDER_ALREADY_CANCELLED`, `ORDER_NOT_CANCELLABLE`
-(with `status`), `ORDER_CANCELLATION_CLOSED` (with `deadline`) and `ORDER_NOT_REFUNDABLE`. The shop's deadline applies here too: hide the button after
-it. `CustomerTransaction.orderId` links a payment row to its order; `refundStatus` and `refundedAt`
+(with `status`), `ORDER_CANCELLATION_CLOSED` (with `deadline`) and `ORDER_NOT_REFUNDABLE`. The same `cancellableUntil` applies here: show the button
+only while it is `null` or in the future. `CustomerTransaction.orderId` links a payment row to its order; `refundStatus` and `refundedAt`
 mark a refunded payment.
 
 **Stripe events.** Core learns a refund's outcome from Stripe. Register `charge.refunded` and
@@ -1030,13 +1034,19 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   tax, core's own otherwise. It used to be `0` unless automatic tax was on.
 - **Classes and appointments (core ≥ v1.9.35).** A bookable product carries `booking`:
   `{ type, durationMin, maxParticipants, highlights, room }` (`type` is `'CLASS'` or `'APPOINTMENT'`,
-  `room` is `{ id, name, address, directions }`); any other product has none. Every product also carries
-  `attributes`, its text attributes as `{ name, value }` in the order the studio laid them out.
+  `room` is `{ id, name, address, directions }`, `address` and `directions` possibly `null`). Any other
+  product has `booking: null` (core sends the `null`; api-types types the field optional), so test
+  `product.booking != null`. Every product also carries `attributes`: for a class or appointment its text
+  attributes as `{ name, value }` in the order the studio laid them out, `[]` for any other product.
   The types are `ShopProductBookingResponse`, `ShopRoomResponse` and `ShopProductAttributeResponse`.
 - **Booking dates (core ≥ v1.9.35).** `fetchBookingDates(core, { productId, from, to }, { clientIp })`
   (server-only) lists the dates of one listed class or appointment, or of every one without `productId`,
-  ordered by start. `from` and `to` are days (`YYYY-MM-DD`, core's time zone), inclusive, both optional:
-  without them core answers the product's whole booking window. Each `BookingDate` is
+  ordered by start, then product id. `from` and `to` are days (`YYYY-MM-DD`, core's time zone), inclusive,
+  both optional. Core lists only dates starting after now; it clamps the range to today through 365 days
+  ahead and to each product's own booking window, so without `from`/`to` you get the whole window. A range
+  wholly outside that, or with `from` after `to`, answers 200 with `[]`, not an error. A class lists at
+  most its first `maxDatesShown` dates of the range (a studio setting), whatever their state, cancelled
+  and full ones included. Each `BookingDate` is
   `{ productId, startAt, endAt, bookableUntil, cancellableUntil, cancelled, placesLeft, bookable }`:
   the instants of the date, its booking deadline and its cancelling deadline, whether the studio
   cancelled it, the places still free and core's verdict whether it can be booked now (before
@@ -1044,11 +1054,19 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   A product id that is not a positive integer, or a day not in `YYYY-MM-DD`, rejects with a `ZodError`
   before any request. An unlisted (or not bookable) product answers 404 `SHOP_PRODUCT_NOT_FOUND`, and
   like any shop read it can answer 404 `SHOP_MODULE_DISABLED` and 429; there is no refusal reader for it.
-  Core answers `Cache-Control: private, max-age=60`. The checkout re-checks every dated line and refuses
+  Core answers `Cache-Control: private, max-age=60`.
+
+  A **dated line** is an order line with a `productId` and an `externalRef` of the form
+  `<key>@<ISO instant>` (`<key>` is the cart's own, the instant follows the last `@`); the instant must
+  equal a `BookingDate`'s `startAt`. Both `previewCheckout` and `startCheckout` re-check every dated line
+  and refuse
   with 409 `BOOKING_DATE_UNKNOWN` (no such date), `BOOKING_CLOSED` (past `bookableUntil`),
   `BOOKING_DATE_CANCELLED` or `BOOKING_FULL` (fewer places left than the line's quantity), and with
   `CHECKOUT_CONFLICT` when it lost a race for the last places: let the buyer try again (see Checkout).
-  Every `CustomerOrder` carries the order's `cancellableUntil` (see Order cancellation).
+  In this release only `CLASS` and `APPOINTMENT` products are checked for `BOOKING_DATE_UNKNOWN`,
+  `BOOKING_CLOSED` and `BOOKING_FULL`; a dated line of any other product only meets `BOOKING_DATE_CANCELLED`.
+  Every `CustomerOrder` carries the order's `cancellableUntil`, the cancelling deadline core enforces (see "The deadline is
+  core's" under Order cancellation).
 - **Cancelled class dates (deprecated).** Use `fetchBookingDates` and its `cancelled` instead;
   `fetchCancelledBookings`, `isBookingCancelled` and `CancelledBooking` go away in a later release, together
   with core's endpoint. `fetchCancelledBookings(core, { clientIp })` (server-only) lists the
