@@ -63,6 +63,16 @@ afterEach(() => {
 });
 
 describe('previewSubscriptionCheckout', () => {
+    it('refuses a billing person without a salutation before any request', async () => {
+        const client = mockClient();
+        const { salutation: _dropped, ...billingPerson } = request.billingPerson;
+
+        await expect(
+            previewSubscriptionCheckout(client, { ...request, billingPerson } as unknown as SubscriptionCheckoutRequest, visitor)
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
     it('posts the request with preview true, the serialized configuration and the visitor address', async () => {
         const client = mockClient();
         client.post.mockResolvedValue(preview);
@@ -114,6 +124,16 @@ describe('startSubscriptionCheckout', () => {
         await startSubscriptionCheckout(client, sneaky, visitor);
 
         expect(client.post.mock.calls[0][1]).toMatchObject({ preview: false });
+    });
+
+    it('refuses a delivery person without a salutation before any request', async () => {
+        const client = mockClient();
+        const deliveryPerson = { email: 'jo@example.com', firstname: 'Jo', lastname: 'Doe' };
+
+        await expect(
+            startSubscriptionCheckout(client, { ...request, deliveryPerson, expectedAmount: 49.8 } as unknown as SubscriptionCheckoutRequest, visitor)
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
     });
 
     it('refuses a billing person without a salutation before any request', async () => {

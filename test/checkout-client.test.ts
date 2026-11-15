@@ -34,6 +34,16 @@ const checkoutResponse = {
 };
 
 describe('startCheckout', () => {
+    it('refuses a delivery person without a salutation before any request', async () => {
+        const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
+        const deliveryPerson = { email: 'jo@example.com', firstname: 'Jo', lastname: 'Doe' };
+
+        await expect(
+            startCheckout(client, { order: { ...order, deliveryPerson } as unknown as typeof order, returnUrl: 'https://shop.example' })
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
     it('refuses a billing person without a salutation before any request', async () => {
         const client = { get: vi.fn(), post: vi.fn().mockResolvedValue(checkoutResponse) };
         const { salutation: _dropped, ...billingPerson } = order.billingPerson;
@@ -118,6 +128,16 @@ describe('startCheckout expectedAmount', () => {
 });
 
 describe('previewCheckout', () => {
+    it('refuses a billing person without a salutation before any request', async () => {
+        const client = { get: vi.fn(), post: vi.fn() };
+        const { salutation: _dropped, ...billingPerson } = order.billingPerson;
+
+        await expect(
+            previewCheckout(client, { order: { ...order, billingPerson } as unknown as typeof order, returnUrl: 'https://shop.example' })
+        ).rejects.toBeInstanceOf(ZodError);
+        expect(client.post).not.toHaveBeenCalled();
+    });
+
     const preview = {
         orderId: null,
         orderNumber: null,

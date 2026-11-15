@@ -273,6 +273,7 @@ export interface CustomerOrder {
     refund: OrderRefund;
     invoiceId: number | null;
     invoiceNumber: string | null;
+    /** The cancelling deadline: the earliest among the lines, `null` when no line has one. */
     cancellableUntil: string | null;
 }
 
