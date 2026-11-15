@@ -114,6 +114,7 @@ describe('booking date exports', () => {
     it('the browser entry exports the types, but not the key-holding call', () => {
         const browser = declarations('dist/client-entry.d.ts');
         expect(browser).toMatch(/BookingDate\b/);
+        expect(browser).toMatch(/BookingDateQuery/);
         expect(browser).not.toMatch(/fetchBookingDates/);
     });
 });
