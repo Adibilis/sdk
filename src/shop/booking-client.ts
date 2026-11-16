@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { AdibilisClient } from '../client/api-client.js';
 import { shopCallHeaders, type ShopCallOptions } from '../subscription/checkout-client.js';
-import type { BookingDate, BookingDateQuery, CancelledBooking } from './booking-rules.js';
+import type { BookingDate, BookingDateQuery } from './booking-rules.js';
 
 const BookingDateQueryModel = z.object({
     productId: z.number().int().positive().optional(),
@@ -30,18 +30,4 @@ export async function fetchBookingDates(client: AdibilisClient, query: BookingDa
         return client.get<BookingDate[]>(path);
     }
     return client.get<BookingDate[]>(path, { headers: shopCallHeaders(options) });
-}
-
-/**
- * The class dates the studio cancelled. With `options` the call carries `X-Shop-Client-Ip`;
- * an invalid address rejects the promise with a ZodError before any request is made.
- *
- * @deprecated Use `fetchBookingDates`: every date carries `cancelled`. This call goes away with core's endpoint.
- */
-export async function fetchCancelledBookings(client: AdibilisClient, options?: ShopCallOptions): Promise<CancelledBooking[]> {
-    const path = '/api/shop/booking/cancelled';
-    if (options === undefined) {
-        return client.get<CancelledBooking[]>(path);
-    }
-    return client.get<CancelledBooking[]>(path, { headers: shopCallHeaders(options) });
 }

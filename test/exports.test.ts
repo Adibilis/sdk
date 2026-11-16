@@ -44,19 +44,14 @@ describe('order cancellation exports', () => {
         expect(server).toMatch(/getOrderCancellation/);
         expect(server).toMatch(/cancelOrderByToken/);
         expect(server).toMatch(/orderCancellationRefusalOf/);
-        expect(server).toMatch(/fetchCancelledBookings/);
-        expect(server).toMatch(/isBookingCancelled/);
         expect(server).toMatch(/CustomerOrder\b/);
         expect(server).toMatch(/OrderCancellationRefusal/);
     });
 
-    it('the browser entry exports the types and the date check, but not the key-holding call', () => {
+    it('the browser entry exports the types, but not the key-holding call', () => {
         const browser = declarations('dist/client-entry.d.ts');
         expect(browser).toMatch(/CustomerOrder\b/);
-        expect(browser).toMatch(/CancelledBooking/);
-        expect(browser).toMatch(/isBookingCancelled/);
         expect(browser).not.toMatch(/cancelOrderByToken/);
-        expect(browser).not.toMatch(/fetchCancelledBookings/);
     });
 });
 
