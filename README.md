@@ -1517,13 +1517,14 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-**0.20.0 is a breaking release and keeps `@adbls/api-types` ^1.9.35.** It removes the cancelled-dates API that 0.19.0 deprecated, together
-with core's `GET /api/shop/booking/cancelled`: `fetchCancelledBookings`, `isBookingCancelled` and the `CancelledBooking` type are gone. Coming
-from 0.19.0, list the dates with `fetchBookingDates` and read `cancelled` on each `BookingDate` instead of comparing against a separate list.
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.20.0 keeps
+`@adbls/api-types` ^1.9.35 / core v1.9.35 or later** and is a breaking release: it removes the cancelled-dates API that 0.19.0
+deprecated, together with core's `GET /api/shop/booking/cancelled`. `fetchCancelledBookings`, `isBookingCancelled` and the
+`CancelledBooking` type are gone. Coming from 0.19.0, list the dates with `fetchBookingDates` and read `cancelled` on each
+`BookingDate` instead of comparing against a separate list.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.19.0 keeps
-`@adbls/api-types` ^1.9.35 / core v1.9.35 or later** and reads what that release added for classes and appointments. Coming from 0.18.0,
-nothing breaks; a shop can now:
+**0.19.0 kept `@adbls/api-types` ^1.9.35 / core v1.9.35 or later** and read what that release added for classes and appointments.
+Coming from 0.18.0, nothing broke; a shop could now:
 
 - list a class's or appointment's dates with `fetchBookingDates` (places left, booking and cancelling deadlines, `cancelled`,
   `bookable`) and read a product's `booking` and `attributes`, exported as `ShopProductBookingResponse`, `ShopRoomResponse` and
@@ -1694,5 +1695,5 @@ used to redeclare date-bearing shapes; it imports the generated ones now. Compar
 strings (they order lexicographically) or parse them yourself. In the customer portal's responses
 `nextBillingAt`, `nextDeliveryAt`, `pausedUntil`, `startDate` and a delivery's `dueDate` are
 date-only (`YYYY-MM-DD`, core's time zone): never `new Date('2026-11-03')`, which is UTC midnight
-and shows the previous day west of Greenwich. The other timestamps are instants. So are `startAt`
-(a cancelled class date), a `BookingDate`'s `startAt`, `endAt`, `bookableUntil` and `cancellableUntil`, and an order's `orderedAt`, `cancelledAt`, `refundedAt` and `cancellableUntil`.
+and shows the previous day west of Greenwich. The other timestamps are instants. So are
+a `BookingDate`'s `startAt`, `endAt`, `bookableUntil` and `cancellableUntil`, and an order's `orderedAt`, `cancelledAt`, `refundedAt` and `cancellableUntil`.
