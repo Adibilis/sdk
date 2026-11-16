@@ -1067,16 +1067,6 @@ const note = vat === 'included' ? t('incl. VAT') : vat === 'excluded' ? t('excl.
   `BOOKING_CLOSED` and `BOOKING_FULL`; a dated line of any other product only meets `BOOKING_DATE_CANCELLED`.
   Every `CustomerOrder` carries the order's `cancellableUntil`, the cancelling deadline core enforces (see "The deadline is
   core's" under Order cancellation).
-- **Cancelled class dates (deprecated).** Use `fetchBookingDates` and its `cancelled` instead;
-  `fetchCancelledBookings`, `isBookingCancelled` and `CancelledBooking` go away in a later release, together
-  with core's endpoint. `fetchCancelledBookings(core, { clientIp })` (server-only) lists the
-  class dates the studio cancelled: `{ productId, startAt }`, `startAt` an instant. Hide those dates
-  from the booking picker, and `checkoutRefusalOf` still answers 409 `BOOKING_DATE_CANCELLED` for one
-  that slips through. Compare with `isBookingCancelled(productId, startAt, cancelled)` (browser-safe),
-  never as strings: the same instant can be written two ways. Like any shop read it can answer 404
-  `SHOP_MODULE_DISABLED` and 429; there is no refusal reader for it. Core answers
-  `Cache-Control: private, max-age=60`: cache the list 60 seconds and merge it with the shop's own
-  list of cancelled dates.
 
 ## Newsletter
 
@@ -1527,9 +1517,14 @@ The SDK carries **its own semver** — it is not pinned to the core release tag.
 release tag: `@adbls/api-types@1.4.7` is exactly the API of core `v1.4.7`. It is public too,
 and you can depend on it directly when you build beyond what the SDK wraps.
 
-The dependency range here is the statement of *which core releases this SDK speaks to*: **0.19.0 keeps
-`@adbls/api-types` ^1.9.35 / core v1.9.35 or later** and reads what that release added for classes and appointments. Coming from 0.18.0,
-nothing breaks; a shop can now:
+The dependency range here is the statement of *which core releases this SDK speaks to*: **0.20.0 keeps
+`@adbls/api-types` ^1.9.35 / core v1.9.35 or later** and is a breaking release: it removes the cancelled-dates API that 0.19.0
+deprecated, together with core's `GET /api/shop/booking/cancelled`. `fetchCancelledBookings`, `isBookingCancelled` and the
+`CancelledBooking` type are gone. Coming from 0.19.0, list the dates with `fetchBookingDates` and read `cancelled` on each
+`BookingDate` instead of comparing against a separate list.
+
+**0.19.0 kept `@adbls/api-types` ^1.9.35 / core v1.9.35 or later** and read what that release added for classes and appointments.
+Coming from 0.18.0, nothing broke; a shop could now:
 
 - list a class's or appointment's dates with `fetchBookingDates` (places left, booking and cancelling deadlines, `cancelled`,
   `bookable`) and read a product's `booking` and `attributes`, exported as `ShopProductBookingResponse`, `ShopRoomResponse` and
@@ -1537,8 +1532,6 @@ nothing breaks; a shop can now:
 - read the new checkout refusals with `checkoutRefusalOf`: 409 `BOOKING_DATE_UNKNOWN`, `BOOKING_CLOSED` and `BOOKING_FULL`, each
   with `productId` and `startAt` like `BOOKING_DATE_CANCELLED` (their code is typed `BookingRefusalCode`), and 409
   `CHECKOUT_CONFLICT` (try again). A `switch` over `CheckoutRefusal['code']` that checks for exhaustiveness needs the four new cases.
-- `fetchCancelledBookings`, `isBookingCancelled` and `CancelledBooking` are deprecated in favour of `fetchBookingDates` and its
-  `cancelled`; they stay until core drops its endpoint.
 
 **0.18.0 required `@adbls/api-types` ^1.9.35 / core v1.9.35 or later** (core requires the Anrede on every person since then, and the SDK now refuses a
 request without one before it leaves the process). Coming from 0.17.0, a shop changed:
@@ -1639,7 +1632,6 @@ write-up: `2026-08-24-website-blast-radius-inventory.md`.
 | `GET /api/customer/order/{id}` | one order of the signed-in customer's (`getOrder`); 404 `ORDER_NOT_FOUND` for another customer's |
 | `POST /api/customer/order/{id}/cancel` | the customer cancels and refunds an order (`cancelOrder`); the same 409 refusals as by link |
 | `GET /api/shop/booking/dates` | the dates of a listed class or appointment, or of all of them (`fetchBookingDates`); 404 `SHOP_PRODUCT_NOT_FOUND` for an unlisted or not bookable product, 404 while the `shop` module is disabled; 429; `Cache-Control: private, max-age=60` |
-| `GET /api/shop/booking/cancelled` | deprecated: the class dates the studio cancelled (`fetchCancelledBookings`); 404 while the `shop` module is disabled; `Cache-Control: private, max-age=60` |
 | `POST /api/sales/order/ingest/stripe` | the legacy ingest path, deprecated in favour of checkout |
 | `GET /api/property/published` | one page of the properties with a live `OWN_WEBSITE` listing |
 | `GET /api/property/published/{id}` | 404 unless that property is published |
@@ -1703,5 +1695,5 @@ used to redeclare date-bearing shapes; it imports the generated ones now. Compar
 strings (they order lexicographically) or parse them yourself. In the customer portal's responses
 `nextBillingAt`, `nextDeliveryAt`, `pausedUntil`, `startDate` and a delivery's `dueDate` are
 date-only (`YYYY-MM-DD`, core's time zone): never `new Date('2026-11-03')`, which is UTC midnight
-and shows the previous day west of Greenwich. The other timestamps are instants. So are `startAt`
-(a cancelled class date), a `BookingDate`'s `startAt`, `endAt`, `bookableUntil` and `cancellableUntil`, and an order's `orderedAt`, `cancelledAt`, `refundedAt` and `cancellableUntil`.
+and shows the previous day west of Greenwich. The other timestamps are instants. So are
+a `BookingDate`'s `startAt`, `endAt`, `bookableUntil` and `cancellableUntil`, and an order's `orderedAt`, `cancelledAt`, `refundedAt` and `cancellableUntil`.
